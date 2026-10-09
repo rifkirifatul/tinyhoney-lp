@@ -2,11 +2,11 @@ name: Auto Sync Fork
 
 on:
   schedule:
-    - cron: '0 * * * *' # Jalan tiap jam
-  workflow_dispatch: # Supaya bisa di-trigger manual
+    - cron: '0 * * * *' 
+  workflow_dispatch: 
 
 permissions:
-  contents: write # Wajib ada agar GITHUB_TOKEN punya akses push ke repo
+  contents: write 
 
 jobs:
   sync:
@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Ambil seluruh histori commit
+          fetch-depth: 0 
 
       - name: Sync upstream
         run: |
