@@ -42,23 +42,28 @@
     <!-- SECTION 1: Hero — satisfies Req 2.1–2.6, 3.1–3.4, 16.1, 17.1 -->
     <section id="hero" class="hero" aria-label="Perkenalan produk TinyHoney">
       <div class="hero__content">
-        <p class="hero__badge">
+        <!-- <p class="hero__badge">
           <span aria-hidden="true">🍯</span>
           100% Madu Murni &amp; Ekstrak Alami | Terdaftar BPOM &amp; Bersertifikat Halal
-        </p>
+        </p> -->
         <h1 class="hero__title">Pencernaan Sehat, Makan Lahap, Imunitas Kuat.</h1>
         <p class="hero__subtitle">
           <b>TinyHoney</b> menghadirkan kebaikan madu murni dengan jahe merah dan daun pepaya
           sebagai sumber prebiotik alami untuk <b>memperbaiki pencernaan, menjaga imunitas,
           serta mengembalikan nafsu makan si kecil</b> dari dalam.
         </p>
-        <a href="#"
-           class="btn btn--whatsapp js-whatsapp-cta"
-           data-cta-context="hero"
-           target="_blank"
-           rel="noopener noreferrer">
-          👉 Konsultasi &amp; Order via WhatsApp
-        </a>
+        <div class="hero__cta-group">
+          <a href="#"
+             class="btn btn--whatsapp js-whatsapp-cta"
+             data-cta-context="hero"
+             target="_blank"
+             rel="noopener noreferrer">
+            Konsultasi &amp; Order via WhatsApp
+          </a>
+          <a href="#promo" class="btn btn--secondary">
+            Info Promo
+          </a>
+        </div>
         <p class="hero__note">
           <em>*Cocok &amp; aman dikonsumsi untuk anak usia 1 tahun ke atas</em>
         </p>
@@ -157,7 +162,7 @@
             </p>
           </div>
           <div class="root-cause__image-wrap">
-            <img src="assets/images/product-podium.png"
+            <img src="assets/images/pencernaan-sehat.png"
                  alt="Botol produk TinyHoney dengan komposisi madu murni dan 6 ekstrak herbal alami"
                  class="root-cause__image"
                  width="400"
@@ -332,9 +337,60 @@
       </div>
     </section>
 
-    <!-- Promo Section Placeholder — satisfies Req 14.1–14.3; hidden until content is added -->
-    <section id="promo" aria-label="" hidden>
-      <!-- Content will be inserted here when a promo or pricing offer is ready -->
+    <!-- Promo / Pricing Section -->
+    <section id="promo" class="promo-pricing" aria-label="Penawaran harga spesial TinyHoney">
+      <div class="container">
+
+        <div class="promo-pricing__header">
+          <span class="promo-pricing__eyebrow">🔥 Penawaran Terbatas</span>
+          <h2 class="promo-pricing__title">Dapatkan Harga Spesial<br>Sekarang!</h2>
+        </div>
+
+        <div class="promo-pricing__split">
+
+          <!-- Kiri: gambar produk -->
+          <div class="promo-pricing__image-wrap">
+            <img src="assets/images/tinyhoney-free-sendok.png"
+                 alt="TinyHoney 1 botol dengan bonus sendok kayu gratis"
+                 width="420" height="420"
+                 loading="lazy"
+                 class="promo-pricing__image">
+            <span class="promo-pricing__tag">FREE Sendok Kayu</span>
+          </div>
+
+          <!-- Kanan: info harga & CTA -->
+          <div class="promo-pricing__info">
+
+            <div class="promo-pricing__product-name">1 Botol TinyHoney</div>
+
+            <div class="promo-pricing__prices">
+              <span class="promo-pricing__price-old">Rp149.000</span>
+              <span class="promo-pricing__price-new">Rp129.000</span>
+            </div>
+
+            <div class="promo-pricing__savings">
+              HEMAT Rp20.000 DARI HARGA NORMAL‼️
+            </div>
+
+            <ul class="promo-pricing__perks">
+              <li>🎁 <strong>FREE Sendok Kayu</strong></li>
+              <li>✅ BPOM &amp; Halal terjamin</li>
+              <li>🚚 Kirim ke seluruh Indonesia</li>
+              <li>⚡ Stok terbatas</li>
+            </ul>
+
+            <a href="https://wa.me/6289503263580?text=Hallo%20bunda%2C%20aku%20mau%20ambil%20Promo%201%20Botol%20Tinyhoney%20Rp129.000%20FREE%20Sendok%20Kayu%20nya%20dong%20bun!"
+               class="btn btn--whatsapp btn--promo"
+               target="_blank"
+               rel="noopener noreferrer"
+               aria-label="Ambil promo TinyHoney 1 botol Rp129.000 via WhatsApp">
+              Ambil Promo Sekarang
+            </a>
+
+          </div>
+        </div>
+
+      </div>
     </section>
 
     <!-- SECTION 8: FAQ — satisfies Req 10.1–10.6, 17.4, 17.5 -->
@@ -501,3 +557,7 @@
   <script defer src="js/main.js"></script>
 </body>
 </html>
+
+
+
+

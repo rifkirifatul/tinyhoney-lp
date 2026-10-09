@@ -24,8 +24,7 @@
    * @returns {string} Pre-filled message referencing product, consultation, and order
    */
   function buildWhatsAppMessage() {
-    return 'Halo Kak, aku tertarik sama produk Tinyhoney untuk anak aku. ' +
-           'Aku mau konsultasi seputar produk sekaligus memesan produknya. Terima kasih!';
+    return 'Halo Bunda, Aku tertarik dan mau konsultasi seputar produk Tinyhoney nya bun ^^';
   }
 
   var WHATSAPP_CONFIG = {
