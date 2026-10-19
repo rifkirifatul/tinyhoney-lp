@@ -1,0 +1,27 @@
+{
+  "name": "tinyhoney-lp",
+  "version": "1.0.0",
+  "description": "TinyHoney landing page — vanilla HTML/CSS/JS static single-page site (Pencernaan Sehat, Makan Lahap, Imunitas Kuat).",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "test": "jest",
+    "test:pbt": "jest tests/pbt",
+    "test:unit": "jest tests/unit",
+    "test:integration": "playwright test",
+    "test:a11y": "playwright test --grep @a11y",
+    "test:perf": "lighthouse http://localhost:3000 --output=html --output-path=./lighthouse-report.html --quiet"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
+    "fast-check": "4.10.2",
+    "jest": "30.5.2",
+    "jest-environment-jsdom": "30.5.2",
+    "jsdom": "26.1.0",
+    "lighthouse": "12.7.1"
+  }
+}

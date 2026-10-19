@@ -1,0 +1,1104 @@
+﻿/* ============================================
+   1. CSS Custom Properties (Design Tokens)
+   ============================================ */
+:root {
+  /* Colors */
+  --color-primary:      #D97706; /* honey amber */
+  --color-primary-dark: #B45309;
+  --color-secondary:    #65A30D; /* natural green */
+  --color-whatsapp:     #25D366;
+  --color-bg:           #FFFBEB; /* warm honey tint */
+  --color-bg-alt:       #FEF3C7;
+  --color-text:         #1F2937;
+  --color-text-muted:   #78716C;
+  --color-white:        #FFFFFF;
+  --color-focus:        #2563EB;
+
+  /* Typography */
+  --font-body: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Spacing */
+  --spacing-xs: 0.5rem;
+  --spacing-sm: 1rem;
+  --spacing-md: 1.5rem;
+  --spacing-lg: 2rem;
+  --spacing-xl: 3rem;
+
+  /* Layout */
+  --container-max: 1200px;
+  --radius:        12px;
+  --shadow-sm:     0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md:     0 4px 12px rgba(0, 0, 0, 0.10);
+}
+
+/* ============================================
+   2. Base / Reset
+   ============================================ */
+
+/* Box-sizing inheritance */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Margin / padding reset */
+body,
+h1, h2, h3, h4, h5, h6,
+p,
+ul, ol {
+  margin:  0;
+  padding: 0;
+}
+
+/* Base body — 16 px minimum satisfies Req 15.4 */
+body {
+  font-family:      var(--font-body);
+  font-size:        16px;
+  line-height:      1.6;
+  color:            var(--color-text);
+  background-color: var(--color-bg);
+}
+
+/* Heading scale — no skipped levels */
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+
+/* Images */
+img {
+  max-width: 100%;
+  height:    auto;
+  display:   block;
+}
+
+/* Focus indicator — 3:1+ contrast ratio satisfies Req 17.3 */
+*:focus-visible {
+  outline:        3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Links — color inherited from context, decoration stripped */
+a {
+  color:           inherit;
+  text-decoration: none;
+}
+
+/* Remove default list bullets (utility; sections can restore as needed) */
+ul, ol {
+  list-style: none;
+}
+
+/* ============================================
+   3. Layout utilities (container, grid)
+   ============================================ */
+
+.container {
+  max-width:  var(--container-max);
+  margin:     0 auto;
+  padding:    0 var(--spacing-sm);
+}
+
+.section-title {
+  text-align:    center;
+  margin-bottom: var(--spacing-lg);
+  color:         var(--color-primary);
+  font-weight:   700;
+}
+
+/* ============================================
+   4. Component styles (per section)
+   ============================================ */
+
+/* --- Site Header --- */
+.site-header {
+  display:          flex;
+  align-items:      center;
+  padding:          var(--spacing-sm);
+  background:       var(--color-white);
+  box-shadow:       var(--shadow-sm);
+  position:         sticky;
+  top:              0;
+  z-index:          100;
+}
+
+.site-header__logo {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-xs);
+}
+
+.site-header__brand {
+  font-weight: 700;
+  font-size:   1.125rem;
+  color:       var(--color-primary);
+}
+
+/* --- Hero Section --- */
+.hero {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-lg);
+  padding:        var(--spacing-lg) var(--spacing-sm);
+  background:     linear-gradient(135deg, var(--color-bg) 0%, var(--color-bg-alt) 100%);
+}
+
+.hero__badge {
+  background:    var(--color-primary);
+  color:         var(--color-white);
+  padding:       var(--spacing-xs) var(--spacing-sm);
+  border-radius: 999px;
+  font-size:     0.875rem;
+  font-weight:   600;
+  display:       inline-block;
+  margin-bottom: var(--spacing-sm);
+}
+
+.hero__title {
+  font-size:     2rem;
+  font-weight:   800;
+  color:         var(--color-primary-dark);
+  line-height:   1.2;
+  margin-bottom: var(--spacing-sm);
+}
+
+.hero__subtitle {
+  font-size:     1rem;
+  color:         var(--color-text);
+  margin-bottom: var(--spacing-md);
+  line-height:   1.7;
+}
+
+.hero__note {
+  font-size:  0.875rem;
+  color:      var(--color-text-muted);
+  font-style: italic;
+  margin-top: var(--spacing-xs);
+}
+
+.hero__image img {
+  width:         100%;
+  border-radius: var(--radius);
+}
+
+@media (min-width: 768px) {
+  .hero {
+    flex-direction: row;
+    align-items:    center;
+    padding:        var(--spacing-xl) var(--spacing-lg);
+  }
+
+  .hero__content {
+    flex: 1;
+  }
+
+  .hero__image {
+    flex: 1;
+  }
+}
+
+/* --- WhatsApp Button --- */
+.btn--whatsapp {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           var(--spacing-xs);
+  background:    var(--color-whatsapp);
+  color:         var(--color-white);
+  font-weight:   700;
+  font-size:     1rem;
+  padding:       var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius);
+  cursor:        pointer;
+  transition:    opacity 0.2s;
+  text-align:    center;
+}
+
+.btn--whatsapp:hover,
+.btn--whatsapp:focus-visible {
+  opacity: 0.88;
+}
+
+/* --- Pain Points Section --- */
+.pain-points {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: var(--color-bg-alt);
+}
+
+.pain-points__grid {
+  display:               grid;
+  grid-template-columns: 1fr;
+  gap:                   var(--spacing-md);
+}
+
+.problem-card {
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  padding:       var(--spacing-md);
+  box-shadow:    var(--shadow-sm);
+}
+
+.problem-card img {
+  width:            100%;
+  border-radius:    calc(var(--radius) - 4px);
+  margin-bottom:    var(--spacing-sm);
+  aspect-ratio:     1;
+  object-fit:       cover;
+}
+
+.problem-card__title {
+  font-size:     1.125rem;
+  font-weight:   700;
+  margin-bottom: var(--spacing-xs);
+  color:         var(--color-primary-dark);
+}
+
+.problem-card__desc {
+  font-size:   0.9375rem;
+  color:       var(--color-text-muted);
+  line-height: 1.6;
+}
+
+@media (min-width: 768px) {
+  .pain-points__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .pain-points__grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* --- Root Cause Section --- */
+.root-cause {
+  padding: var(--spacing-xl) var(--spacing-sm);
+}
+
+.root-cause__inner {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-lg);
+  align-items:    center;
+}
+
+.root-cause__title {
+  font-size:     1.5rem;
+  font-weight:   800;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-sm);
+  line-height:   1.3;
+}
+
+.root-cause__body {
+  font-size:     1rem;
+  color:         var(--color-text);
+  line-height:   1.7;
+  margin-bottom: var(--spacing-sm);
+}
+
+.root-cause__image {
+  border-radius: var(--radius);
+  box-shadow:    var(--shadow-md);
+}
+
+@media (min-width: 1024px) {
+  .root-cause__inner {
+    flex-direction: row;
+  }
+
+  .root-cause__content {
+    flex: 1;
+  }
+
+  .root-cause__image-wrap {
+    flex-shrink: 0;
+  }
+
+  .root-cause__image {
+    min-width: 400px;
+  }
+}
+
+/* --- Ingredients Section --- */
+.ingredients {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: var(--color-bg-alt);
+}
+
+.ingredients__grid {
+  display:               grid;
+  grid-template-columns: 1fr;
+  gap:                   var(--spacing-md);
+}
+
+.ingredient-card {
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  padding:       var(--spacing-md);
+  text-align:    center;
+  box-shadow:    var(--shadow-sm);
+}
+
+.ingredient-card img {
+  width:         100px;
+  height:        100px;
+  object-fit:    contain;
+  margin:        0 auto var(--spacing-sm);
+}
+
+.ingredient-card__name {
+  font-weight:   700;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.ingredient-card__benefit {
+  font-size:   0.875rem;
+  color:       var(--color-text-muted);
+  line-height: 1.6;
+}
+
+@media (min-width: 768px) {
+  .ingredients__grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .ingredients__grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* --- Taste Section --- */
+.taste {
+  padding: var(--spacing-xl) var(--spacing-sm);
+}
+
+.taste__features {
+  display:               grid;
+  grid-template-columns: 1fr;
+  gap:                   var(--spacing-md);
+  margin-top:            var(--spacing-lg);
+}
+
+.taste-feature {
+  background:    var(--color-bg-alt);
+  border-radius: var(--radius);
+  padding:       var(--spacing-md);
+  text-align:    center;
+}
+
+.taste-feature__icon {
+  font-size:     2rem;
+  display:       block;
+  margin-bottom: var(--spacing-xs);
+}
+
+.taste-feature__title {
+  font-weight:   700;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.taste-feature__desc {
+  font-size: 0.9375rem;
+  color:     var(--color-text-muted);
+}
+
+@media (min-width: 768px) {
+  .taste__features {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- Cara Konsumsi Section --- */
+.cara-konsumsi {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: var(--color-bg-alt);
+}
+
+.cara-konsumsi__points {
+  display:               grid;
+  grid-template-columns: 1fr;
+  gap:                   var(--spacing-md);
+  margin-top:            var(--spacing-lg);
+}
+
+.usage-point {
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  padding:       var(--spacing-md);
+  text-align:    center;
+  box-shadow:    var(--shadow-sm);
+}
+
+.usage-point__icon {
+  font-size:     2rem;
+  display:       block;
+  margin-bottom: var(--spacing-xs);
+}
+
+.usage-point__title {
+  font-weight:   700;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.usage-point__desc {
+  font-size: 0.9375rem;
+  color:     var(--color-text-muted);
+}
+
+@media (min-width: 768px) {
+  .cara-konsumsi__points {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- Social Proof Section --- */
+.social-proof {
+  padding: var(--spacing-xl) var(--spacing-sm);
+}
+
+.social-proof__certs {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-md);
+  margin:         var(--spacing-lg) 0;
+}
+
+.cert-group {
+  display:       flex;
+  align-items:   flex-start;
+  gap:           var(--spacing-sm);
+  background:    var(--color-bg-alt);
+  border-radius: var(--radius);
+  padding:       var(--spacing-md);
+}
+
+.cert-group img {
+  flex-shrink: 0;
+  width:       60px;
+  height:      60px;
+  object-fit:  contain;
+}
+
+.cert-group__claim {
+  font-size:   0.9375rem;
+  color:       var(--color-text);
+  line-height: 1.6;
+}
+
+.social-proof__product {
+  text-align: center;
+  margin:     var(--spacing-lg) 0;
+}
+
+.social-proof__product img {
+  margin:        0 auto;
+  max-width:     320px;
+  border-radius: var(--radius);
+  box-shadow:    var(--shadow-md);
+}
+
+.social-proof__testimoni-title {
+  text-align:    center;
+  font-weight:   700;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-md);
+}
+
+.testimoni-grid {
+  display:               grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap:                   var(--spacing-sm);
+}
+
+.testimoni-grid img {
+  border-radius: var(--radius);
+  width:         100%;
+}
+
+@media (min-width: 768px) {
+  .social-proof__certs {
+    flex-direction: row;
+  }
+
+  .testimoni-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* --- FAQ Section --- */
+.faq {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: var(--color-bg-alt);
+}
+
+.faq__list {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-sm);
+  margin-top:     var(--spacing-lg);
+}
+
+.faq-item {
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  box-shadow:    var(--shadow-sm);
+  overflow:      hidden;
+}
+
+.faq-item__heading {
+  margin: 0;
+}
+
+.faq-item__trigger {
+  width:           100%;
+  text-align:      left;
+  background:      none;
+  border:          none;
+  padding:         var(--spacing-md);
+  font-size:       1rem;
+  font-weight:     600;
+  color:           var(--color-text);
+  cursor:          pointer;
+  display:         flex;
+  justify-content: space-between;
+  align-items:     center;
+  font-family:     var(--font-body);
+}
+
+.faq-item__trigger::after {
+  content:    '＋';
+  font-size:  1.25rem;
+  color:      var(--color-primary);
+  flex-shrink: 0;
+}
+
+.faq-item__trigger[aria-expanded="true"]::after {
+  content: '－';
+}
+
+.faq-item__panel {
+  padding:     0 var(--spacing-md) var(--spacing-md);
+  font-size:   0.9375rem;
+  color:       var(--color-text-muted);
+  line-height: 1.7;
+}
+
+.faq-item__panel[hidden] {
+  display: none;
+}
+
+/* --- Final CTA Section --- */
+.final-cta {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color:      var(--color-white);
+  text-align: center;
+}
+
+.final-cta__title {
+  font-size:     1.75rem;
+  font-weight:   800;
+  margin-bottom: var(--spacing-sm);
+}
+
+.final-cta__subtitle {
+  font-size:   1rem;
+  opacity:     0.92;
+  max-width:   600px;
+  margin:      0 auto var(--spacing-lg);
+  line-height: 1.7;
+}
+
+/* --- Sticky WhatsApp Button (Req 1.3, 13.1–13.4) --- */
+.sticky-wa {
+  position:      fixed;
+  bottom:        16px;
+  right:         16px;
+  z-index:       1000;
+  background:    var(--color-whatsapp);
+  color:         var(--color-white);
+  border-radius: 999px;
+  padding:       var(--spacing-sm) var(--spacing-md);
+  display:       flex;
+  align-items:   center;
+  gap:           var(--spacing-xs);
+  font-weight:   700;
+  font-size:     0.9375rem;
+  box-shadow:    var(--shadow-md);
+  transition:    opacity 0.2s;
+}
+
+.sticky-wa:hover,
+.sticky-wa:focus-visible {
+  opacity: 0.88;
+}
+
+.sticky-wa img {
+  width:  28px;
+  height: 28px;
+}
+
+/* --- Footer --- */
+.site-footer {
+  background:  var(--color-text);
+  color:       var(--color-white);
+  padding:     var(--spacing-xl) var(--spacing-sm);
+  text-align:  center;
+}
+
+.site-footer__brand {
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  gap:             var(--spacing-xs);
+  margin-bottom:   var(--spacing-md);
+  font-size:       1.125rem;
+  font-weight:     700;
+}
+
+.site-footer__certs {
+  font-size:     0.875rem;
+  opacity:       0.85;
+  margin-bottom: var(--spacing-sm);
+}
+
+.site-footer__contact {
+  margin-bottom: var(--spacing-md);
+}
+
+.site-footer__contact a {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           var(--spacing-xs);
+  background:    var(--color-whatsapp);
+  color:         var(--color-white);
+  font-weight:   700;
+  padding:       var(--spacing-xs) var(--spacing-md);
+  border-radius: var(--radius);
+}
+
+.site-footer__copyright {
+  font-size: 0.8125rem;
+  opacity:   0.6;
+}
+
+
+/* --- Promo / Pricing Section --- */
+.promo-pricing {
+  padding:    var(--spacing-xl) var(--spacing-sm);
+  background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #0f2027 100%);
+  color:      var(--color-white);
+}
+
+.promo-pricing__header {
+  text-align:    center;
+  margin-bottom: var(--spacing-xl);
+}
+
+.promo-pricing__eyebrow {
+  display:        inline-block;
+  background:     var(--color-primary);
+  color:          var(--color-white);
+  font-size:      0.8125rem;
+  font-weight:    700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding:        0.35rem var(--spacing-sm);
+  border-radius:  999px;
+  margin-bottom:  var(--spacing-sm);
+}
+
+.promo-pricing__title {
+  font-size:   2rem;
+  font-weight: 800;
+  color:       var(--color-white);
+  line-height: 1.2;
+}
+
+/* Split layout — stacked on mobile, side-by-side on tablet+ */
+.promo-pricing__split {
+  display:        flex;
+  flex-direction: column;
+  align-items:    center;
+  gap:            var(--spacing-xl);
+  max-width:      900px;
+  margin:         0 auto;
+}
+
+@media (min-width: 768px) {
+  .promo-pricing__split {
+    flex-direction: row;
+    align-items:    center;
+  }
+}
+
+/* Left: product image */
+.promo-pricing__image-wrap {
+  position:   relative;
+  flex:       1;
+  text-align: center;
+}
+
+.promo-pricing__image {
+  width:         100%;
+  max-width:     380px;
+  margin:        0 auto;
+  border-radius: var(--radius);
+  filter:        drop-shadow(0 8px 32px rgba(0,0,0,0.5));
+}
+
+.promo-pricing__tag {
+  position:      absolute;
+  top:           12px;
+  right:         12px;
+  background:    #FCD34D;
+  color:         #1F2937;
+  font-size:     0.8125rem;
+  font-weight:   800;
+  padding:       0.3rem 0.75rem;
+  border-radius: 999px;
+  white-space:   nowrap;
+  box-shadow:    0 2px 8px rgba(0,0,0,0.25);
+}
+
+/* Right: price info */
+.promo-pricing__info {
+  flex:           1;
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-md);
+}
+
+.promo-pricing__product-name {
+  font-size:      1rem;
+  font-weight:    600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color:          #94A3B8;
+}
+
+.promo-pricing__prices {
+  display:     flex;
+  align-items: baseline;
+  gap:         var(--spacing-sm);
+  flex-wrap:   wrap;
+}
+
+.promo-pricing__price-old {
+  font-size:       1.25rem;
+  color:           #F87171;
+  text-decoration: line-through;
+  opacity:         0.8;
+}
+
+.promo-pricing__price-new {
+  font-size:   3rem;
+  font-weight: 900;
+  color:       #ffffff;
+  line-height: 1;
+}
+
+.promo-pricing__perks {
+  list-style:     none;
+  padding:        0;
+  margin:         0;
+  display:        flex;
+  flex-direction: column;
+  gap:            0.6rem;
+}
+
+.promo-pricing__perks li {
+  font-size:   0.9375rem;
+  color:       #CBD5E1;
+  line-height: 1.5;
+}
+
+.promo-pricing__perks li strong {
+  color: var(--color-white);
+}
+
+.promo-pricing__savings {
+  display:       inline-block;
+  background:    rgba(222, 74, 74, 0.41);
+  border:        1px solid rgba(222, 74, 74, 0.644);
+  color:         #ffffff;
+  font-size:     0.9375rem;
+  font-weight:   700;
+  padding:       0.5rem var(--spacing-sm);
+  border-radius: var(--radius);
+}
+
+.btn--promo {
+  font-size:       1.125rem;
+  font-weight:     800;
+  padding:         1rem var(--spacing-xl);
+  border-radius:   999px;
+  justify-content: center;
+  box-shadow:      0 4px 24px rgba(37, 211, 102, 0.45);
+  transition:      transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  text-align:      center;
+}
+
+.btn--promo:hover,
+.btn--promo:focus-visible {
+  transform:  translateY(-2px);
+  box-shadow: 0 8px 32px rgba(37, 211, 102, 0.55);
+  opacity:    1;
+}
+
+/* --- Hero CTA group (primary + secondary side by side) --- */
+.hero__cta-group {
+  display:   flex;
+  flex-wrap: wrap;
+  gap:       var(--spacing-sm);
+  align-items: center;
+}
+
+/* Secondary button — outlined, muted, clearly subordinate to WhatsApp CTA */
+.btn--secondary {
+  display:       inline-flex;
+  align-items:   center;
+  gap:           var(--spacing-xs);
+  background:    transparent;
+  color:         var(--color-primary-dark);
+  font-weight:   600;
+  font-size:     1rem;
+  padding:       var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius);
+  border:        2px solid var(--color-primary);
+  cursor:        pointer;
+  transition:    background 0.2s, color 0.2s;
+  text-align:    center;
+}
+
+.btn--secondary:hover,
+.btn--secondary:focus-visible {
+  background: var(--color-primary);
+  color:      var(--color-white);
+}
+
+/* ============================================
+   5. Inline icons (SVG sprite)
+   ============================================ */
+.icon {
+  width:         1em;
+  height:        1em;
+  display:       inline-block;
+  vertical-align: -0.125em;
+  flex-shrink:   0;
+}
+
+/* Inline icons that sit before heading / pill / list text */
+.problem-card__title .icon {
+  color: var(--color-primary);
+}
+
+.promo-pricing__perks .icon {
+  color:          var(--color-primary);
+  vertical-align: -0.15em;
+}
+
+.promo-pricing__eyebrow .icon,
+.promo-pricing__savings .icon {
+  vertical-align: -0.15em;
+}
+
+/* Larger feature icons (Taste & Cara Konsumsi sections) */
+.taste-feature__icon .icon,
+.usage-point__icon .icon {
+  width:  2.25rem;
+  height: 2.25rem;
+  color:  var(--color-primary);
+}
+
+/* ============================================
+   6. Checkout Modal (Duitku)
+   ============================================ */
+.checkout-modal {
+  position:        fixed;
+  inset:           0;
+  z-index:         2000;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         var(--spacing-sm);
+}
+
+.checkout-modal[hidden] {
+  display: none;
+}
+
+.checkout-modal__backdrop {
+  position:        absolute;
+  inset:           0;
+  background:      rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.checkout-modal__dialog {
+  position:      relative;
+  z-index:       1;
+  width:         100%;
+  max-width:     480px;
+  max-height:    calc(100vh - 2 * var(--spacing-sm));
+  overflow-y:    auto;
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  box-shadow:    0 20px 60px rgba(0, 0, 0, 0.35);
+  padding:       var(--spacing-lg) var(--spacing-md) var(--spacing-md);
+}
+
+.checkout-modal__close {
+  position:        absolute;
+  top:             var(--spacing-sm);
+  right:           var(--spacing-sm);
+  width:           36px;
+  height:          36px;
+  display:         inline-flex;
+  align-items:     center;
+  justify-content: center;
+  border:          none;
+  background:      var(--color-bg-alt);
+  color:           var(--color-text);
+  border-radius:   999px;
+  cursor:          pointer;
+  font-size:       1.125rem;
+  transition:      background 0.2s;
+}
+
+.checkout-modal__close:hover,
+.checkout-modal__close:focus-visible {
+  background: var(--color-bg);
+}
+
+.checkout-modal__title {
+  font-size:     1.375rem;
+  font-weight:   800;
+  color:         var(--color-primary-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.checkout-modal__desc {
+  font-size:     0.9375rem;
+  color:         var(--color-text-muted);
+  line-height:   1.6;
+  margin-bottom: var(--spacing-md);
+}
+
+/* Lock background scroll while the modal is open */
+body.checkout-open {
+  overflow: hidden;
+}
+
+/* --- Checkout form --- */
+.checkout-form {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-md);
+}
+
+.checkout-form__row {
+  display: flex;
+  gap:     var(--spacing-sm);
+}
+
+.checkout-form__row .checkout-form__field {
+  flex:      1;
+  min-width: 0;
+}
+
+.checkout-form__field {
+  display:        flex;
+  flex-direction: column;
+  gap:            0.35rem;
+}
+
+.checkout-form__field label {
+  font-size:   0.875rem;
+  font-weight: 600;
+  color:       var(--color-text);
+}
+
+.checkout-form__field input,
+.checkout-form__field select,
+.checkout-form__field textarea {
+  width:         100%;
+  font-family:   var(--font-body);
+  font-size:     1rem;
+  color:         var(--color-text);
+  background:    var(--color-white);
+  border:        1.5px solid #E7E5E4;
+  border-radius: calc(var(--radius) - 4px);
+  padding:       0.65rem 0.75rem;
+  transition:    border-color 0.2s, box-shadow 0.2s;
+}
+
+.checkout-form__field textarea {
+  resize:     vertical;
+  min-height: 84px;
+}
+
+.checkout-form__field input:focus,
+.checkout-form__field select:focus,
+.checkout-form__field textarea:focus {
+  outline:      none;
+  border-color: var(--color-primary);
+  box-shadow:   0 0 0 3px rgba(217, 119, 6, 0.18);
+}
+
+.checkout-form__summary {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             var(--spacing-sm);
+  background:      var(--color-bg-alt);
+  border-radius:   var(--radius);
+  padding:         var(--spacing-sm) var(--spacing-md);
+  font-size:       0.9375rem;
+  color:           var(--color-text-muted);
+}
+
+.checkout-form__summary strong {
+  font-size:   1.25rem;
+  font-weight: 800;
+  color:       var(--color-primary-dark);
+}
+
+.checkout-form__secure {
+  display:     flex;
+  align-items: center;
+  gap:         var(--spacing-xs);
+  font-size:   0.8125rem;
+  color:       var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.checkout-form__secure .icon {
+  width:  1rem;
+  height: 1rem;
+  color:  var(--color-secondary);
+}
+
+.checkout-form__submit {
+  width: 100%;
+}
+
+.checkout-form__submit[disabled] {
+  opacity:    0.7;
+  cursor:     not-allowed;
+  transform:  none;
+  box-shadow: none;
+}
+
+@media (max-width: 420px) {
+  .checkout-form__row {
+    flex-direction: column;
+  }
+}
+
