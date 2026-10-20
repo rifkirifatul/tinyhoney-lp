@@ -662,7 +662,7 @@
     </div>
   </footer>
 
-  <!-- Checkout Modal — Duitku payment flow (triggered by .js-checkout-open) -->
+  <!-- Checkout Modal (triggered by .js-checkout-open) -->
   <div class="checkout-modal" id="checkout-modal" hidden>
     <div class="checkout-modal__backdrop" data-checkout-close></div>
 
@@ -680,7 +680,7 @@
 
       <h2 class="checkout-modal__title" id="checkout-title">Form Pemesanan</h2>
       <p class="checkout-modal__desc" id="checkout-desc">
-        Lengkapi alamat, cek ongkir dari gudang TinyHoney, lalu lanjut ke pembayaran Duitku.
+        Lengkapi alamat, cek ongkir dari gudang TinyHoney, lalu lanjut ke pembayaran.
       </p>
 
       <form class="checkout-form" id="checkout-form" novalidate>
@@ -830,14 +830,14 @@
 
           <p class="checkout-form__secure">
             <svg class="icon" aria-hidden="true"><use href="#icon-lock"/></svg>
-            Pembayaran aman &amp; otomatis diproses melalui Duitku.
+            Pembayaran aman melalui Payment Gateway Resmi.
           </p>
 
           <div class="checkout-nav">
             <button type="button" class="btn btn--secondary" id="checkout-back-3">Kembali</button>
             <button type="submit" class="btn btn--promo checkout-form__submit" id="checkout-submit">
               <svg class="icon" aria-hidden="true"><use href="#icon-shopping-bag"/></svg>
-              <span class="checkout-form__submit-label">Bayar dengan Duitku</span>
+              <span class="checkout-form__submit-label">Bayar Sekarang</span>
             </button>
           </div>
         </section>
@@ -845,7 +845,7 @@
     </div>
   </div>
 
-  <!-- Payment result banner (populated when Duitku redirects back) -->
+  <!-- Payment result banner (populated when payment gateway redirects back) -->
   <div id="payment-result" class="payment-result" hidden role="status" aria-live="polite"></div>
 
   <!-- Deferred JS - satisfies Req 19.3 -->

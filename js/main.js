@@ -61,10 +61,12 @@
     originAddress: 'Jl. Saturnus Tengah I No. 1, Manjahlega, Rancasari, Kota Bandung, Jawa Barat 40286',
 
     // Product package defaults used for rate calculation.
-    weightPerItemGram: 500,
-    lengthCm: 10,
-    widthCm: 10,
-    heightCm: 15,
+    // Everpro only accepts integer dimensions, so 5.5 x 5.5 x 10.5 cm is
+    // rounded up to 6 x 6 x 11 cm.
+    weightPerItemGram: 175,
+    lengthCm: 6,
+    widthCm: 6,
+    heightCm: 11,
     packageTypeId: 1,
     shipmentType: 'DROP',
 
@@ -138,7 +140,7 @@
     lines.push('- Total: ' + formatRupiah(amount));
     lines.push('- Metode Pembayaran: ' + getPaymentMethodName(details.payment_method));
     if (details.order_number) { lines.push('- No. Order: ' + details.order_number); }
-    if (details.reference) { lines.push('- Kode Referensi Duitku: ' + details.reference); }
+    if (details.reference) { lines.push('- Kode Referensi Pembayaran: ' + details.reference); }
     lines.push('');
     lines.push('Detail Pembeli:');
     lines.push('- Nama: ' + (details.customer_name || '-'));
@@ -1136,7 +1138,7 @@
       function resetSubmit() {
         if (submitBtn) {
           submitBtn.disabled = false;
-          if (submitLabel) { submitLabel.textContent = 'Bayar dengan Duitku'; }
+          if (submitLabel) { submitLabel.textContent = 'Bayar Sekarang'; }
         }
       }
 
