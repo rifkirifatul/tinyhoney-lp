@@ -70,6 +70,99 @@ function formatPhone62(phone: string): string {
   return value;
 }
 
+/**
+ * Everpro requires pickup_time in practice, even for DROP orders. Buyers never
+ * choose a pickup slot, so default to the next day at 10:00 Asia/Jakarta
+ * (03:00 UTC), skipping Sunday. The admin can still adjust the pickup schedule
+ * from the Everpro dashboard.
+ */
+function defaultPickupTime(): number {
+  const now = new Date();
+  const jakartaNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+  let candidate = new Date(Date.UTC(
+    jakartaNow.getUTCFullYear(),
+    jakartaNow.getUTCMonth(),
+    jakartaNow.getUTCDate() + 1,
+    3,
+    0,
+    0,
+    0,
+  ));
+
+  // Sunday is not a normal courier pickup day.
+  while (candidate.getUTCDay() === 0) {
+    candidate = new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
+  }
+
+  return Math.floor(candidate.getTime() / 1000);
+}
+
+/**
+ * Picks the earliest available pickup slot for the selected rate. If Everpro
+ * does not return any slot, fall back to defaultPickupTime().
+ */
+async function resolvePickupTime(
+  apiUrl: string,
+  token: string,
+  rateCode: string,
+): Promise<number> {
+  try {
+    const url = `${apiUrl}/shipment/v1/pickup-times?rate_codes=${
+      encodeURIComponent(rateCode)
+    }&timezone=Asia/Jakarta`;
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      console.warn(
+        "[LP-EVERPRO-CREATE-ORDER] pickup-times HTTP",
+        response.status,
+      );
+      return defaultPickupTime();
+    }
+
+    const json = await response.json();
+    const groups = Array.isArray(json?.data?.available_pickup_time)
+      ? json.data.available_pickup_time
+      : [];
+    const target = String(rateCode || "").toUpperCase();
+    const group = groups.find((item: any) =>
+      String(item?.rate_code || "").toUpperCase() === target
+    ) || groups[0];
+    const days = Array.isArray(group?.pickup_time_list)
+      ? group.pickup_time_list
+      : [];
+
+    const now = Date.now();
+    let earliest: number | null = null;
+    for (const day of days) {
+      const slots = Array.isArray(day?.pickup_times) ? day.pickup_times : [];
+      for (const slot of slots) {
+        const startMs = new Date(slot?.start_at).getTime();
+        if (!Number.isFinite(startMs) || startMs <= now) continue;
+        const timestamp = Math.floor(startMs / 1000);
+        if (earliest === null || timestamp < earliest) earliest = timestamp;
+      }
+    }
+
+    if (earliest !== null) {
+      console.log(
+        "[LP-EVERPRO-CREATE-ORDER] Using available pickup time:",
+        new Date(earliest * 1000).toISOString(),
+      );
+      return earliest;
+    }
+  } catch (error) {
+    console.warn(
+      "[LP-EVERPRO-CREATE-ORDER] pickup-times lookup failed:",
+      (error as Error).message,
+    );
+  }
+
+  return defaultPickupTime();
+}
+
 function normalizeRatePrice(price: unknown): number {
   const value = Number(price);
   if (!Number.isFinite(value) || value < 0) return 0;
@@ -571,7 +664,14 @@ serve(async (req) => {
       );
     }
 
-    // 5. Create the Everpro shipment order.
+    // 5. Pick a pickup slot server-side (the buyer never chooses one).
+    const pickupTime = await resolvePickupTime(
+      apiUrl,
+      token,
+      String(selectedRate?.rate_code || rateCode),
+    );
+
+    // 6. Create the Everpro shipment order.
     const orderPayload: Record<string, unknown> = {
       cashback: 0,
       client_order_no: orderNumber,
@@ -588,6 +688,10 @@ serve(async (req) => {
       package_desc: `${config.productName} x${quantity}`,
       package_price: productTotal,
       package_type_id: config.packageTypeId,
+      // Required by Everpro. The buyer never chooses this; the server uses the
+      // earliest available slot (or a safe default) and the admin can
+      // reschedule from the Everpro dashboard.
+      pickup_time: pickupTime,
       rate_code: String(selectedRate?.rate_code || rateCode),
       receiver_address: receiver.address,
       receiver_name: receiver.name,

@@ -18,9 +18,24 @@ These functions are isolated from the main webstore functions:
    - verifies the transaction with Duitku `transactionStatus`;
    - checks that the paid amount matches the server-calculated product + shipping total;
    - re-fetches rates from Everpro and matches the selected `rate_code`;
+   - chooses the `pickup_time` server-side (the buyer never selects a pickup slot);
    - creates the Everpro order using the server-side shipper data;
    - is idempotent by using the Duitku order number as Everpro `client_order_no`.
 5. The buyer is then redirected to WhatsApp with the order number, Everpro order number, and AWB if available.
+
+### Pickup time
+
+Everpro requires `pickup_time` when creating an order. The function resolves it
+automatically:
+
+1. It calls Everpro's `GET /shipment/v1/pickup-times` for the selected
+   `rate_code`, using `Asia/Jakarta`.
+2. It uses the earliest future slot returned.
+3. If no slot is available (or the lookup fails), it falls back to the next day
+   at 10:00 Asia/Jakarta, skipping Sunday.
+
+The admin can still adjust the pickup schedule from the Everpro dashboard. No
+pickup-time input is shown to the buyer.
 
 If payment verification or Everpro creation fails, the buyer is still redirected to WhatsApp with a note that the shipment will be created manually by the admin. No unpaid order can be created.
 
