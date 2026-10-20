@@ -680,34 +680,138 @@
 
       <h2 class="checkout-modal__title" id="checkout-title">Form Pemesanan</h2>
       <p class="checkout-modal__desc" id="checkout-desc">
-        Lengkapi data pengiriman, pilih metode pembayaran, lalu lanjut ke halaman pembayaran Duitku.
+        Lengkapi alamat, cek ongkir dari gudang TinyHoney, lalu lanjut ke pembayaran Duitku.
       </p>
 
-      <form class="checkout-form" id="checkout-form">
-        <div class="checkout-form__field">
-          <label for="lp-name">Nama Lengkap</label>
-          <input type="text" id="lp-name" name="customer_name"
-                 autocomplete="name" required>
-        </div>
+      <form class="checkout-form" id="checkout-form" novalidate>
+        <ol class="checkout-steps" aria-label="Langkah checkout">
+          <li class="checkout-steps__item is-active" data-step-indicator="1">1. Alamat</li>
+          <li class="checkout-steps__item" data-step-indicator="2">2. Ongkir</li>
+          <li class="checkout-steps__item" data-step-indicator="3">3. Ringkasan</li>
+        </ol>
 
-        <div class="checkout-form__field">
-          <label for="lp-phone">Nomor HP / WhatsApp</label>
-          <input type="tel" id="lp-phone" name="phone"
-                 inputmode="numeric" autocomplete="tel"
-                 placeholder="08xxxxxxxxxx" required>
-        </div>
-
-        <div class="checkout-form__field">
-          <label for="lp-address">Alamat Lengkap</label>
-          <textarea id="lp-address" name="address" rows="3"
-                    autocomplete="street-address" required></textarea>
-        </div>
-
-        <div class="checkout-form__row">
+        <!-- Step 1: recipient + address -->
+        <section class="checkout-panel" data-step="1">
           <div class="checkout-form__field">
-            <label for="lp-quantity">Jumlah</label>
-            <input type="number" id="lp-quantity" name="quantity"
-                   min="1" step="1" value="1" inputmode="numeric" required>
+            <label for="lp-name">Nama Lengkap</label>
+            <input type="text" id="lp-name" name="customer_name"
+                   autocomplete="name" required>
+          </div>
+
+          <div class="checkout-form__field">
+            <label for="lp-phone">Nomor HP / WhatsApp</label>
+            <input type="tel" id="lp-phone" name="phone"
+                   inputmode="numeric" autocomplete="tel"
+                   placeholder="08xxxxxxxxxx" required>
+          </div>
+
+          <div class="checkout-form__row">
+            <div class="checkout-form__field">
+              <label for="lp-province">Provinsi</label>
+              <select id="lp-province" name="province" required>
+                <option value="">Memuat provinsi&hellip;</option>
+              </select>
+            </div>
+            <div class="checkout-form__field">
+              <label for="lp-city">Kabupaten / Kota</label>
+              <select id="lp-city" name="city" required disabled>
+                <option value="">Pilih provinsi dulu</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="checkout-form__row">
+            <div class="checkout-form__field">
+              <label for="lp-district">Kecamatan</label>
+              <select id="lp-district" name="district" required disabled>
+                <option value="">Pilih kabupaten dulu</option>
+              </select>
+            </div>
+            <div class="checkout-form__field">
+              <label for="lp-subdistrict">Kelurahan / Desa</label>
+              <select id="lp-subdistrict" name="subdistrict" required disabled>
+                <option value="">Pilih kecamatan dulu</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="checkout-form__row">
+            <div class="checkout-form__field">
+              <label for="lp-postal-code">Kode Pos</label>
+              <input type="text" id="lp-postal-code" name="postal_code"
+                     inputmode="numeric" readonly required>
+            </div>
+            <div class="checkout-form__field">
+              <label for="lp-quantity">Jumlah Botol</label>
+              <input type="number" id="lp-quantity" name="quantity"
+                     min="1" step="1" value="1" inputmode="numeric" required>
+            </div>
+          </div>
+
+          <div class="checkout-form__field">
+            <label for="lp-address">Alamat Lengkap</label>
+            <textarea id="lp-address" name="address" rows="3"
+                      autocomplete="street-address"
+                      placeholder="Nama jalan, nomor rumah, RT/RW, patokan"
+                      required></textarea>
+          </div>
+
+          <button type="button" class="btn btn--promo checkout-form__submit" id="checkout-next-1">
+            Lanjut Cek Ongkir
+          </button>
+        </section>
+
+        <!-- Step 2: shipping rates -->
+        <section class="checkout-panel" data-step="2" hidden>
+          <div class="checkout-shipping-head">
+            <p class="checkout-form__hint" id="shipping-status">
+              Pilih kurir lalu lanjut ke ringkasan pesanan.
+            </p>
+            <button type="button" class="btn btn--secondary checkout-form__secondary"
+                    id="checkout-check-rates">
+              Cek Ulang Ongkir
+            </button>
+          </div>
+
+          <div class="shipping-options" id="shipping-options"
+               role="radiogroup" aria-label="Pilihan kurir"></div>
+
+          <div class="checkout-nav">
+            <button type="button" class="btn btn--secondary" id="checkout-back-2">Kembali</button>
+            <button type="button" class="btn btn--promo" id="checkout-next-2" disabled>
+              Lanjut Ringkasan
+            </button>
+          </div>
+        </section>
+
+        <!-- Step 3: summary + payment -->
+        <section class="checkout-panel" data-step="3" hidden>
+          <div class="checkout-summary" id="checkout-summary">
+            <div class="checkout-summary__row">
+              <span>Produk</span>
+              <strong id="summary-product">1 Botol TinyHoney</strong>
+            </div>
+            <div class="checkout-summary__row">
+              <span>Jumlah</span>
+              <strong id="summary-quantity">1 botol</strong>
+            </div>
+            <div class="checkout-summary__row">
+              <span>Subtotal</span>
+              <strong id="summary-subtotal">Rp129.000</strong>
+            </div>
+            <div class="checkout-summary__row">
+              <span>Pengiriman</span>
+              <strong id="summary-shipping">-</strong>
+            </div>
+            <div class="checkout-summary__row" id="summary-shipping-discount-row" hidden>
+              <span>Diskon Ongkir</span>
+              <strong id="summary-shipping-discount">-</strong>
+            </div>
+            <div class="checkout-summary__row checkout-summary__row--total">
+              <span>Total Pembayaran</span>
+              <strong id="summary-total">Rp129.000</strong>
+            </div>
+            <p class="checkout-summary__destination" id="summary-destination"></p>
           </div>
 
           <div class="checkout-form__field">
@@ -723,22 +827,20 @@
               <option value="ID">Indomaret</option>
             </select>
           </div>
-        </div>
 
-        <div class="checkout-form__summary">
-          <span>Total Pembayaran</span>
-          <strong id="checkout-total">Rp129.000</strong>
-        </div>
+          <p class="checkout-form__secure">
+            <svg class="icon" aria-hidden="true"><use href="#icon-lock"/></svg>
+            Pembayaran aman &amp; otomatis diproses melalui Duitku.
+          </p>
 
-        <p class="checkout-form__secure">
-          <svg class="icon" aria-hidden="true"><use href="#icon-lock"/></svg>
-          Pembayaran aman &amp; otomatis diproses melalui Duitku.
-        </p>
-
-        <button type="submit" class="btn btn--promo checkout-form__submit" id="checkout-submit">
-          <svg class="icon" aria-hidden="true"><use href="#icon-shopping-bag"/></svg>
-          <span class="checkout-form__submit-label">Beli Sekarang</span>
-        </button>
+          <div class="checkout-nav">
+            <button type="button" class="btn btn--secondary" id="checkout-back-3">Kembali</button>
+            <button type="submit" class="btn btn--promo checkout-form__submit" id="checkout-submit">
+              <svg class="icon" aria-hidden="true"><use href="#icon-shopping-bag"/></svg>
+              <span class="checkout-form__submit-label">Bayar dengan Duitku</span>
+            </button>
+          </div>
+        </section>
       </form>
     </div>
   </div>

@@ -1096,9 +1096,208 @@ body.checkout-open {
   box-shadow: none;
 }
 
+/* --- Checkout wizard --- */
+.checkout-steps {
+  display:         flex;
+  gap:             var(--spacing-xs);
+  list-style:      none;
+  padding:         0;
+  margin:          0 0 var(--spacing-sm);
+  counter-reset:   none;
+}
+
+.checkout-steps__item {
+  flex:          1;
+  text-align:    center;
+  font-size:     0.75rem;
+  font-weight:   700;
+  color:         var(--color-text-muted);
+  background:    var(--color-bg-alt);
+  border-radius: 999px;
+  padding:       0.4rem 0.35rem;
+  line-height:   1.2;
+}
+
+.checkout-steps__item.is-active {
+  color:      var(--color-white);
+  background: var(--color-primary);
+}
+
+.checkout-steps__item.is-done {
+  color:      var(--color-primary-dark);
+  background: rgba(217, 119, 6, 0.16);
+}
+
+.checkout-panel {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-md);
+}
+
+.checkout-panel[hidden] {
+  display: none;
+}
+
+.checkout-form__field select:disabled,
+.checkout-form__field input:read-only {
+  background: #F5F5F4;
+  color:      var(--color-text-muted);
+  cursor:     not-allowed;
+}
+
+.checkout-form__hint {
+  font-size:   0.8125rem;
+  color:       var(--color-text-muted);
+  line-height: 1.5;
+  margin:      0;
+}
+
+.checkout-form__secondary {
+  align-self: flex-start;
+  font-size:  0.875rem;
+  padding:    0.55rem 1rem;
+}
+
+.checkout-shipping-head {
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  gap:             var(--spacing-sm);
+}
+
+.shipping-options {
+  display:        flex;
+  flex-direction: column;
+  gap:            var(--spacing-xs);
+}
+
+.shipping-option {
+  display:       flex;
+  align-items:   center;
+  gap:           var(--spacing-sm);
+  border:        1.5px solid #E7E5E4;
+  border-radius: var(--radius);
+  padding:       0.65rem 0.75rem;
+  cursor:        pointer;
+  transition:    border-color 0.2s, background 0.2s;
+}
+
+.shipping-option:hover,
+.shipping-option:focus-within {
+  border-color: var(--color-primary);
+}
+
+.shipping-option.is-selected {
+  border-color: var(--color-primary);
+  background:   rgba(217, 119, 6, 0.08);
+}
+
+.shipping-option input {
+  width:  1.05rem;
+  height: 1.05rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+  flex:    0 0 auto;
+}
+
+.shipping-option__body {
+  flex:      1;
+  min-width: 0;
+}
+
+.shipping-option__name {
+  display:     block;
+  font-size:   0.9375rem;
+  font-weight: 700;
+  color:       var(--color-text);
+}
+
+.shipping-option__meta {
+  display:   block;
+  font-size: 0.75rem;
+  color:     var(--color-text-muted);
+}
+
+.shipping-option__price {
+  font-size:   0.9375rem;
+  font-weight: 800;
+  color:       var(--color-primary-dark);
+  white-space: nowrap;
+}
+
+.checkout-nav {
+  display: flex;
+  gap:     var(--spacing-sm);
+}
+
+.checkout-nav .btn {
+  flex: 1;
+}
+
+.checkout-summary {
+  display:        flex;
+  flex-direction: column;
+  gap:            0.45rem;
+  background:     var(--color-bg-alt);
+  border-radius:  var(--radius);
+  padding:        var(--spacing-sm) var(--spacing-md);
+}
+
+.checkout-summary__row {
+  display:         flex;
+  align-items:     flex-start;
+  justify-content: space-between;
+  gap:             var(--spacing-sm);
+  font-size:       0.875rem;
+  color:           var(--color-text-muted);
+}
+
+.checkout-summary__row strong {
+  color:       var(--color-text);
+  font-weight: 700;
+  text-align:  right;
+}
+
+.checkout-summary__row[hidden] {
+  display: none;
+}
+
+#summary-shipping-discount {
+  color: var(--color-primary-dark);
+}
+
+.checkout-summary__row--total {
+  border-top:  1px solid #E7E5E4;
+  padding-top: 0.55rem;
+  margin-top:  0.15rem;
+  font-size:   1rem;
+}
+
+.checkout-summary__row--total strong {
+  font-size:   1.25rem;
+  color:       var(--color-primary-dark);
+}
+
+.checkout-summary__destination {
+  font-size:   0.75rem;
+  line-height: 1.5;
+  color:       var(--color-text-muted);
+  margin:      0.25rem 0 0;
+}
+
+.checkout-form__submit {
+  flex: 1;
+}
+
 @media (max-width: 420px) {
   .checkout-form__row {
     flex-direction: column;
+  }
+
+  .checkout-shipping-head,
+  .checkout-nav {
+    flex-direction: column;
+    align-items:    stretch;
   }
 }
 
