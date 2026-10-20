@@ -35,7 +35,9 @@ const LP_CONFIGS: Record<string, {
 }> = {
   tinyhoney: {
     unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 129000),
-    freeShippingMax: envInt("LP_TINYHONEY_FREE_SHIPPING_MAX", 30000),
+    // Promo free shipping is currently disabled. Set the env to 30000 (and
+    // update CHECKOUT_CONFIG.freeShippingMax in js/main.js) to re-enable it.
+    freeShippingMax: envInt("LP_TINYHONEY_FREE_SHIPPING_MAX", 0),
     weightPerItemGram: envInt("LP_TINYHONEY_WEIGHT_GRAM", 175),
     lengthCm: envInt("LP_TINYHONEY_LENGTH_CM", 6),
     widthCm: envInt("LP_TINYHONEY_WIDTH_CM", 6),

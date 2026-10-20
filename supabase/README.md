@@ -63,7 +63,7 @@ Optional product overrides:
 
 ```text
 LP_TINYHONEY_UNIT_PRICE=129000
-LP_TINYHONEY_FREE_SHIPPING_MAX=30000
+LP_TINYHONEY_FREE_SHIPPING_MAX=0
 LP_TINYHONEY_WEIGHT_GRAM=175
 LP_TINYHONEY_LENGTH_CM=6
 LP_TINYHONEY_WIDTH_CM=6
@@ -72,6 +72,17 @@ LP_TINYHONEY_PRODUCT_NAME=TinyHoney
 ```
 
 The defaults already match the current LP. Keep the LP's `CHECKOUT_CONFIG.unitPrice` and `freeShippingMax` in sync with these values.
+
+### Free-shipping promo
+
+The free-shipping promo is **currently disabled**:
+
+- `LP_TINYHONEY_FREE_SHIPPING_MAX=0`
+- `CHECKOUT_CONFIG.freeShippingMax = 0` in `js/main.js`
+
+The promotional copy can stay on the landing page, but no shipping discount is applied to the amount. To re-enable it later, set both values to the same cap (for example `30000`) and redeploy the function.
+
+Buyers pay the shipping cost added by the server. If the client and server caps differ, `lp-everpro-create-order` rejects the order with `Nominal pembayaran tidak cocok` to prevent underpayment.
 
 ## Deploy
 

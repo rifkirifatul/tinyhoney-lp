@@ -42,7 +42,9 @@
     landingPageSource: 'tinyhoney',
     notes: 'Pesanan via LP Tiny Honey',
     // Keep these values in sync with LP_TINYHONEY_* secrets in Supabase.
-    freeShippingMax: 30000           // Promo FREE ONGKIR max. Rp30.000
+    // Promo free shipping sedang tidak aktif. Teks promosi di halaman tetap
+    // ditampilkan, tetapi potongan ongkir tidak diterapkan.
+    freeShippingMax: 0
   };
 
   // --- Everpro shipping integration ---
@@ -632,6 +634,73 @@
     return 'Status pembayaran tidak diketahui' + (resultCode ? ' (kode: ' + resultCode + ')' : '') + '.';
   }
 
+  // --- Payment processing overlay ---
+  // Shown immediately after a successful Duitku redirect while the server
+  // verifies the payment and creates the Everpro shipment.
+  var paymentProcessingOverlay = null;
+  var paymentProcessingBeforeUnload = null;
+
+  function preventUnloadWhileProcessing(e) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+
+  function updatePaymentProcessingOverlay(title, description) {
+    if (!paymentProcessingOverlay) { return; }
+    if (title && paymentProcessingOverlay.title) {
+      paymentProcessingOverlay.title.textContent = title;
+    }
+    if (description && paymentProcessingOverlay.description) {
+      paymentProcessingOverlay.description.textContent = description;
+    }
+  }
+
+  function showPaymentProcessingOverlay(title, description) {
+    if (typeof document === 'undefined' || !document.body) { return; }
+
+    if (!paymentProcessingOverlay) {
+      var overlay = document.createElement('div');
+      overlay.className = 'payment-processing';
+      overlay.setAttribute('role', 'status');
+      overlay.setAttribute('aria-live', 'polite');
+      overlay.innerHTML =
+        '<div class="payment-processing__card">' +
+          '<div class="payment-processing__spinner" aria-hidden="true"></div>' +
+          '<h2 class="payment-processing__title"></h2>' +
+          '<p class="payment-processing__desc"></p>' +
+          '<p class="payment-processing__hint">Jangan tutup atau refresh halaman ini.</p>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      paymentProcessingOverlay = {
+        element: overlay,
+        title: overlay.querySelector('.payment-processing__title'),
+        description: overlay.querySelector('.payment-processing__desc')
+      };
+    }
+
+    updatePaymentProcessingOverlay(title, description);
+    paymentProcessingOverlay.element.removeAttribute('hidden');
+    document.body.classList.add('payment-processing-open');
+
+    if (typeof window !== 'undefined' && !paymentProcessingBeforeUnload) {
+      paymentProcessingBeforeUnload = preventUnloadWhileProcessing;
+      window.addEventListener('beforeunload', paymentProcessingBeforeUnload);
+    }
+  }
+
+  function hidePaymentProcessingOverlay() {
+    if (paymentProcessingOverlay) {
+      paymentProcessingOverlay.element.setAttribute('hidden', '');
+    }
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.remove('payment-processing-open');
+    }
+    if (typeof window !== 'undefined' && paymentProcessingBeforeUnload) {
+      window.removeEventListener('beforeunload', paymentProcessingBeforeUnload);
+      paymentProcessingBeforeUnload = null;
+    }
+  }
+
   /**
    * Handles the Duitku redirect back to this landing page (if any).
    * On success, verifies the payment and creates the Everpro order through
@@ -693,7 +762,15 @@
       };
 
       var shippingOrder = { success: false, error: '' };
-      if (stored && orderNumber) {
+      var canCreateOrder = !!(stored && orderNumber);
+      showPaymentProcessingOverlay(
+        'Pembayaran berhasil',
+        canCreateOrder
+          ? 'Mohon tunggu, kami sedang membuat order pengiriman...'
+          : 'Mohon tunggu, kami sedang menyiapkan pesan WhatsApp...'
+      );
+
+      if (canCreateOrder) {
         if (banner) {
           banner.textContent = 'Pembayaran berhasil. Membuat order pengiriman...';
           banner.removeAttribute('hidden');
@@ -708,6 +785,10 @@
           if (banner) {
             banner.textContent = 'Pembayaran berhasil. Order pengiriman akan diproses admin.';
           }
+          updatePaymentProcessingOverlay(
+            'Pembayaran berhasil',
+            'Order pengiriman akan diproses admin. Mengarahkan ke WhatsApp...'
+          );
         } else {
           var everproData = shippingOrder.data || {};
           details.everpro_order_no = everproData.everpro_order_no || everproData.order_number || '';
@@ -715,10 +796,21 @@
           if (banner) {
             banner.textContent = 'Pembayaran berhasil. Order pengiriman sudah dibuat.';
           }
+          updatePaymentProcessingOverlay(
+            'Order pengiriman berhasil dibuat',
+            'Mengarahkan ke WhatsApp admin...'
+          );
         }
       } else {
         details.shipping_note = 'Detail alamat tidak tersedia. Admin akan membuat order pengiriman manual.';
+        updatePaymentProcessingOverlay(
+          'Pembayaran berhasil',
+          'Mengarahkan ke WhatsApp admin...'
+        );
       }
+
+      // Give the buyer a moment to read the final status before navigating.
+      await new Promise(function (resolve) { setTimeout(resolve, 600); });
 
       var waMessage = buildOrderWhatsAppMessage(details);
       var waUrl = buildWhatsAppUrl(WHATSAPP_CONFIG.phone, waMessage);
@@ -736,6 +828,9 @@
           window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
         }
       } catch (e) { /* ignore */ }
+
+      // Release the refresh guard and hide the overlay right before navigating.
+      hidePaymentProcessingOverlay();
 
       try {
         window.location.href = waUrl;

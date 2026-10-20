@@ -1354,3 +1354,77 @@ body.checkout-open {
   }
 }
 
+/* ============================================
+   Payment Processing Overlay
+   ============================================ */
+body.payment-processing-open {
+  overflow: hidden;
+}
+
+.payment-processing {
+  position:        fixed;
+  inset:           0;
+  z-index:         3000;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         var(--spacing-sm);
+  background:      rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(3px);
+}
+
+.payment-processing[hidden] {
+  display: none;
+}
+
+.payment-processing__card {
+  width:         100%;
+  max-width:     420px;
+  background:    var(--color-white);
+  border-radius: var(--radius);
+  box-shadow:    0 20px 60px rgba(0, 0, 0, 0.35);
+  padding:       var(--spacing-lg) var(--spacing-md);
+  text-align:    center;
+}
+
+.payment-processing__spinner {
+  width:            56px;
+  height:           56px;
+  margin:           0 auto var(--spacing-sm);
+  border:           6px solid var(--color-bg-alt);
+  border-top-color: var(--color-primary);
+  border-radius:   50%;
+  animation:        payment-processing-spin 0.9s linear infinite;
+}
+
+.payment-processing__title {
+  margin:      0 0 0.35rem;
+  font-size:   1.25rem;
+  font-weight: 800;
+  color:       var(--color-primary-dark);
+}
+
+.payment-processing__desc {
+  margin:      0;
+  font-size:   0.9375rem;
+  line-height: 1.6;
+  color:       var(--color-text-muted);
+}
+
+.payment-processing__hint {
+  margin:      var(--spacing-sm) 0 0;
+  font-size:   0.8125rem;
+  font-weight: 600;
+  color:       var(--color-text-muted);
+}
+
+@keyframes payment-processing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .payment-processing__spinner {
+    animation-duration: 2s;
+  }
+}
+
