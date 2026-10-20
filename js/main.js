@@ -75,7 +75,8 @@
     widthCm: 6,
     heightCm: 11,
     packageTypeId: 1,
-    shipmentType: 'DROP',
+    // Couriers pick up the parcel at the TinyHoney warehouse.
+    shipmentType: 'PICKUP',
 
     // Everpro returns rate prices in cents (sen); convert to Rupiah.
     ratePriceDivisor: 100,

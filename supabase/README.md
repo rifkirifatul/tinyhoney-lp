@@ -37,6 +37,18 @@ automatically:
 The admin can still adjust the pickup schedule from the Everpro dashboard. No
 pickup-time input is shown to the buyer.
 
+### Shipment type
+
+The LP currently uses `PICKUP`: the courier picks up the parcel from the
+TinyHoney warehouse. This value must match in two places:
+
+- `EVERPRO_CONFIG.shipmentType` in `js/main.js` (used for rate lookup)
+- `LP_CONFIGS.tinyhoney.shipmentType` in `lp-everpro-create-order` (used for
+  order creation)
+
+To switch to `DROP`, change both values to `DROP`, redeploy the function, and
+publish the LP. Rates and the paid amount must be recalculated after switching.
+
 If payment verification or Everpro creation fails, the buyer is still redirected to WhatsApp with a note that the shipment will be created manually by the admin. No unpaid order can be created.
 
 ## Required Supabase secrets

@@ -44,7 +44,8 @@ const LP_CONFIGS: Record<string, {
     heightCm: envInt("LP_TINYHONEY_HEIGHT_CM", 11),
     productName: Deno.env.get("LP_TINYHONEY_PRODUCT_NAME") || "TinyHoney",
     packageTypeId: 1,
-    shipmentType: "DROP",
+    // Courier pickup at the TinyHoney warehouse.
+    shipmentType: "PICKUP",
   },
 };
 
