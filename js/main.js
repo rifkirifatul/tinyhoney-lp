@@ -41,19 +41,24 @@
     productName: '1 Botol TinyHoney',
     landingPageSource: 'tinyhoney',
     notes: 'Pesanan via LP Tiny Honey',
+    // Keep these values in sync with LP_TINYHONEY_* secrets in Supabase.
     freeShippingMax: 30000           // Promo FREE ONGKIR max. Rp30.000
   };
 
   // --- Everpro shipping integration ---
-  // These are the existing Edge Functions used by the main website.
+  // Address lookup uses the existing shared functions. Rates and order
+  // creation use LP-specific functions so the webstore is not affected.
   var EVERPRO_CONFIG = {
     base: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1',
     provincesEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-provinces',
     citiesEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-cities',
     districtsEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-districts',
     subdistrictsEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-subdistricts',
-    ratesEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-rates',
+    // LP-specific rate function (isolated from the webstore sandbox/production).
+    ratesEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/lp-everpro-rates',
     logisticsEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/everpro-logistics',
+    // Called only after Duitku payment is verified server-side.
+    createOrderEndpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/lp-everpro-create-order',
 
     // Shipper origin (TinyHoney warehouse).
     originPostalCode: '40286',
@@ -141,6 +146,9 @@
     lines.push('- Metode Pembayaran: ' + getPaymentMethodName(details.payment_method));
     if (details.order_number) { lines.push('- No. Order: ' + details.order_number); }
     if (details.reference) { lines.push('- Kode Referensi Pembayaran: ' + details.reference); }
+    if (details.everpro_order_no) { lines.push('- No. Order Pengiriman: ' + details.everpro_order_no); }
+    if (details.awb) { lines.push('- No. Resi/AWB: ' + details.awb); }
+    if (details.shipping_note) { lines.push('- Catatan Pengiriman: ' + details.shipping_note); }
     lines.push('');
     lines.push('Detail Pembeli:');
     lines.push('- Nama: ' + (details.customer_name || '-'));
@@ -281,6 +289,7 @@
     var qty = parseInt(values.quantity, 10) || 1;
     var weight = qty * EVERPRO_CONFIG.weightPerItemGram;
     return {
+      lp_slug: CHECKOUT_CONFIG.landingPageSource,
       origin_postal_code: EVERPRO_CONFIG.originPostalCode,
       origin_sub_district_name: EVERPRO_CONFIG.originSubDistrictName,
       destination_postal_code: values.postal_code,
@@ -393,10 +402,86 @@
       payload.courier_name = values.courier_name || '';
       payload.courier_service = values.courier_service || '';
       payload.courier_etd = values.courier_etd || '';
+      payload.rate_code = values.rate_code || '';
+      payload.logistic_code = values.logistic_code || '';
       payload.weight_gram = qty * EVERPRO_CONFIG.weightPerItemGram;
     }
 
     return payload;
+  }
+
+  /**
+   * Builds the payload sent to lp-everpro-create-order after payment.
+   * The server recomputes prices, shipping, and the Everpro rate. The client
+   * only sends identity, destination, quantity, and the selected rate code.
+   * Pure function.
+   * @param {object} stored
+   * @param {string} orderNumber
+   * @param {string} [reference]
+   * @returns {object}
+   */
+  function buildCreateOrderPayload(stored, orderNumber, reference) {
+    stored = stored || {};
+    return {
+      order_number: orderNumber,
+      lp_slug: CHECKOUT_CONFIG.landingPageSource,
+      quantity: parseInt(stored.quantity, 10) || 1,
+      reference: reference || stored.reference || '',
+      receiver_name: stored.customer_name || '',
+      receiver_phone: stored.phone || '',
+      receiver_address: stored.address || '',
+      receiver_postal_code: stored.postal_code || '',
+      receiver_sub_district_name: stored.sub_district_name || '',
+      receiver_district_name: stored.district_name || '',
+      receiver_city_name: stored.city_name || '',
+      receiver_province_name: stored.province_name || '',
+      courier_name: stored.courier_name || '',
+      courier_service: stored.courier_service || '',
+      rate_code: stored.rate_code || '',
+      logistic_code: stored.logistic_code || ''
+    };
+  }
+
+  /**
+   * Creates the Everpro shipment order after payment. The Edge Function
+   * verifies the Duitku transaction server-side and is idempotent.
+   * Side-effectful (network only); never throws.
+   * @param {object} stored
+   * @param {string} orderNumber
+   * @param {string} [reference]
+   * @returns {Promise<{success:boolean, data?:object, error?:string}>}
+   */
+  async function createEverproOrder(stored, orderNumber, reference) {
+    if (!stored || !orderNumber) {
+      return { success: false, error: 'Data checkout tidak tersedia.' };
+    }
+
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = null;
+    if (controller) {
+      timer = setTimeout(function () { controller.abort(); }, 20000);
+    }
+
+    try {
+      var response = await fetch(EVERPRO_CONFIG.createOrderEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildCreateOrderPayload(stored, orderNumber, reference)),
+        signal: controller ? controller.signal : undefined
+      });
+      var result = await response.json();
+      if (!response.ok || !result.success) {
+        return { success: false, error: result.error || ('HTTP ' + response.status) };
+      }
+      return { success: true, data: result };
+    } catch (err) {
+      var message = (err && err.name === 'AbortError')
+        ? 'Waktu habis saat membuat order pengiriman.'
+        : (err && err.message) || 'Gagal membuat order pengiriman.';
+      return { success: false, error: message };
+    } finally {
+      if (timer) { clearTimeout(timer); }
+    }
   }
 
   /**
@@ -454,6 +539,8 @@
               courier_name: values.courier_name || '',
               courier_service: values.courier_service || '',
               courier_etd: values.courier_etd || '',
+              rate_code: values.rate_code || '',
+              logistic_code: values.logistic_code || '',
               weight_gram: qty * EVERPRO_CONFIG.weightPerItemGram,
               order_number: result.order_number || null,
               reference: result.duitku.reference || null
@@ -547,10 +634,11 @@
 
   /**
    * Handles the Duitku redirect back to this landing page (if any).
-   * Shows a status message and cleans the URL. Side-effectful.
-   * @returns {object|null}
+   * On success, verifies the payment and creates the Everpro order through
+   * lp-everpro-create-order before redirecting to WhatsApp. Side-effectful.
+   * @returns {Promise<object|null>}
    */
-  function handleDuitkuRedirect() {
+  async function handleDuitkuRedirect() {
     if (typeof window === 'undefined') { return null; }
     var info = parseDuitkuRedirect(window.location.search);
     if (!info) { return null; }
@@ -574,13 +662,7 @@
     // On successful payment, redirect to WhatsApp with the order payload so the
     // buyer can confirm to the admin with a single tap on "Send".
     if (status === 'success') {
-      var stored = null;
-      try {
-        if (window.sessionStorage) {
-          var raw = window.sessionStorage.getItem('tinyhoney_checkout');
-          if (raw) { stored = JSON.parse(raw); }
-        }
-      } catch (e) { stored = null; }
+      var stored = getStoredCheckout();
 
       var orderNumber = info.merchantOrderId ||
         (stored && stored.order_number) ||
@@ -610,6 +692,34 @@
         reference: reference
       };
 
+      var shippingOrder = { success: false, error: '' };
+      if (stored && orderNumber) {
+        if (banner) {
+          banner.textContent = 'Pembayaran berhasil. Membuat order pengiriman...';
+          banner.removeAttribute('hidden');
+          banner.setAttribute('data-status', 'success');
+        }
+
+        shippingOrder = await createEverproOrder(stored, orderNumber, reference);
+
+        if (!shippingOrder.success) {
+          console.error('Everpro create order failed:', shippingOrder.error);
+          details.shipping_note = 'Order pengiriman akan dibuat manual oleh admin.';
+          if (banner) {
+            banner.textContent = 'Pembayaran berhasil. Order pengiriman akan diproses admin.';
+          }
+        } else {
+          var everproData = shippingOrder.data || {};
+          details.everpro_order_no = everproData.everpro_order_no || everproData.order_number || '';
+          details.awb = everproData.awb || '';
+          if (banner) {
+            banner.textContent = 'Pembayaran berhasil. Order pengiriman sudah dibuat.';
+          }
+        }
+      } else {
+        details.shipping_note = 'Detail alamat tidak tersedia. Admin akan membuat order pengiriman manual.';
+      }
+
       var waMessage = buildOrderWhatsAppMessage(details);
       var waUrl = buildWhatsAppUrl(WHATSAPP_CONFIG.phone, waMessage);
 
@@ -638,7 +748,8 @@
         status: status,
         message: message,
         whatsappUrl: waUrl,
-        whatsappMessage: waMessage
+        whatsappMessage: waMessage,
+        shippingOrder: shippingOrder
       };
     }
 
@@ -877,7 +988,9 @@
         courier_code: state.selectedRate ? state.selectedRate.logistic_code : '',
         courier_name: state.selectedRate ? state.selectedRate.logistic_name : '',
         courier_service: state.selectedRate ? (state.selectedRate.rate_name || state.selectedRate.rate_code) : '',
-        courier_etd: state.selectedRate ? formatShippingEta(state.selectedRate) : ''
+        courier_etd: state.selectedRate ? formatShippingEta(state.selectedRate) : '',
+        rate_code: state.selectedRate ? state.selectedRate.rate_code : '',
+        logistic_code: state.selectedRate ? state.selectedRate.logistic_code : ''
       };
     }
 
@@ -1262,7 +1375,9 @@
     initCheckoutModal();
 
     // 6. Handle Duitku redirect/callback back to this landing page
-    handleDuitkuRedirect();
+    Promise.resolve(handleDuitkuRedirect()).catch(function (err) {
+      console.error('Duitku redirect handler error:', err);
+    });
   });
   }
 
@@ -1284,6 +1399,8 @@
       formatShippingEta: formatShippingEta,
       buildDestinationLabel: buildDestinationLabel,
       buildOrderPayload: buildOrderPayload,
+      buildCreateOrderPayload: buildCreateOrderPayload,
+      createEverproOrder: createEverproOrder,
       handleLpCheckout: handleLpCheckout,
       initCheckoutModal: initCheckoutModal,
       accordionReducer: accordionReducer,

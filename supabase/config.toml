@@ -1,0 +1,9 @@
+# The LP calls these functions from the browser, so JWT verification is disabled.
+# They still verify the Duitku payment server-side and use Everpro secrets that
+# never reach the browser.
+
+[functions.lp-everpro-rates]
+verify_jwt = false
+
+[functions.lp-everpro-create-order]
+verify_jwt = false
