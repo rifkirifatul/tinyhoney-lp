@@ -112,6 +112,7 @@ async function resolvePickupTime(
     }&timezone=Asia/Jakarta`;
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!response.ok) {
