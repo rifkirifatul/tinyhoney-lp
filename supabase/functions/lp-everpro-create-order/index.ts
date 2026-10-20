@@ -72,12 +72,11 @@ function formatPhone62(phone: string): string {
 }
 
 /**
- * Everpro requires pickup_time in practice, even for DROP orders. Buyers never
- * choose a pickup slot, so default to the next day at 10:00 Asia/Jakarta
- * (03:00 UTC), skipping Sunday. The admin can still adjust the pickup schedule
- * from the Everpro dashboard.
+ * Buyers never choose a pickup slot. If Everpro returns no slot we default to
+ * the next day at 10:00 Asia/Jakarta (03:00 UTC), skipping Sunday. The admin
+ * can still adjust the pickup schedule from the Everpro dashboard.
  */
-function defaultPickupTime(): number {
+function defaultPickupTime(): string {
   const now = new Date();
   const jakartaNow = new Date(now.getTime() + 7 * 60 * 60 * 1000);
   let candidate = new Date(Date.UTC(
@@ -95,7 +94,7 @@ function defaultPickupTime(): number {
     candidate = new Date(candidate.getTime() + 24 * 60 * 60 * 1000);
   }
 
-  return Math.floor(candidate.getTime() / 1000);
+  return candidate.toISOString();
 }
 
 /**
@@ -106,7 +105,7 @@ async function resolvePickupTime(
   apiUrl: string,
   token: string,
   rateCode: string,
-): Promise<number> {
+): Promise<string> {
   try {
     const url = `${apiUrl}/shipment/v1/pickup-times?rate_codes=${
       encodeURIComponent(rateCode)
@@ -149,11 +148,12 @@ async function resolvePickupTime(
     }
 
     if (earliest !== null) {
+      const pickupTime = new Date(earliest * 1000).toISOString();
       console.log(
         "[LP-EVERPRO-CREATE-ORDER] Using available pickup time:",
-        new Date(earliest * 1000).toISOString(),
+        pickupTime,
       );
-      return earliest;
+      return pickupTime;
     }
   } catch (error) {
     console.warn(
@@ -692,7 +692,7 @@ serve(async (req) => {
       package_type_id: config.packageTypeId,
       // Required by Everpro. The buyer never chooses this; the server uses the
       // earliest available slot (or a safe default) and the admin can
-      // reschedule from the Everpro dashboard.
+      // reschedule from the Everpro dashboard. Everpro expects RFC3339 here.
       pickup_time: pickupTime,
       rate_code: String(selectedRate?.rate_code || rateCode),
       receiver_address: receiver.address,

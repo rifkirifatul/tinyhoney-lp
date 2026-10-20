@@ -30,9 +30,9 @@ automatically:
 
 1. It calls Everpro's `GET /shipment/v1/pickup-times` for the selected
    `rate_code`, using `Asia/Jakarta`.
-2. It uses the earliest future slot returned.
+2. It uses the earliest future slot returned, formatted as an RFC3339 string.
 3. If no slot is available (or the lookup fails), it falls back to the next day
-   at 10:00 Asia/Jakarta, skipping Sunday.
+   at 10:00 Asia/Jakarta, skipping Sunday, also formatted as RFC3339.
 
 The admin can still adjust the pickup schedule from the Everpro dashboard. No
 pickup-time input is shown to the buyer.
