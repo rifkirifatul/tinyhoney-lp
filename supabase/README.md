@@ -49,6 +49,21 @@ TinyHoney warehouse. This value must match in two places:
 To switch to `DROP`, change both values to `DROP`, redeploy the function, and
 publish the LP. Rates and the paid amount must be recalculated after switching.
 
+### Everpro signed_key
+
+Everpro validates `signed_key` against the raw values used by get-rates. The
+create-order payload must therefore reuse the same raw values:
+
+- `weight` in grams (the same number sent to get-rates), not kilograms;
+- `shipment_price` from the raw rates response (`price`, in cents), not the
+  normalized Rupiah value shown to the buyer;
+- `cashback`, `min_duration`, `max_duration`, `is_flat_rate`, and
+  `insurance_price` from the selected rates response;
+- `package_price` equal to the get-rates `item_price`.
+
+Duitku still uses the normalized Rupiah amount for payment verification. Do not
+normalize `weight` or `shipment_price` before sending them to Everpro.
+
 If payment verification or Everpro creation fails, the buyer is still redirected to WhatsApp with a note that the shipment will be created manually by the admin. No unpaid order can be created.
 
 ## Required Supabase secrets

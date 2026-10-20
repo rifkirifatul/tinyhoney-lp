@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-rfc3339";
+const FUNCTION_BUILD = "2026-10-21-signed-key";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -647,6 +647,9 @@ serve(async (req) => {
     const rates = flattenRates(ratesJson?.data);
     const selectedRate = selectRate(rates, rateCode, courierName, courierService);
     const shippingCost = normalizeRatePrice(selectedRate?.price);
+    // Everpro signs the raw rate values. Keep the raw price (cents) for the
+    // create-order payload, and use the normalized Rupiah value for Duitku.
+    const shippingPriceRaw = Math.round(Number(selectedRate?.price) || 0);
     if (!Number.isFinite(shippingCost) || shippingCost <= 0) {
       throw new HttpError(
         502,
@@ -680,11 +683,14 @@ serve(async (req) => {
 
     // 6. Create the Everpro shipment order.
     const orderPayload: Record<string, unknown> = {
-      cashback: 0,
+      // These values must match the raw values used by get-rates. Everpro
+      // validates signed_key against them, so do not normalize weight or
+      // shipment_price here. The LP uses normalized Rupiah only for Duitku.
+      cashback: Number(selectedRate?.cashback) || 0,
       client_order_no: orderNumber,
       cod_price: 0,
       height: config.heightCm,
-      insurance_price: 0,
+      insurance_price: Number(selectedRate?.insurance_price) || 0,
       is_cod: false,
       is_flat_rate: Boolean(selectedRate?.is_flat_rate),
       is_use_insurance: false,
@@ -705,7 +711,7 @@ serve(async (req) => {
       receiver_phone: formatPhone62(receiver.phone),
       receiver_postal_code: receiver.postalCode,
       receiver_sub_district_name: receiver.subDistrictName,
-      shipment_price: shippingCost,
+      shipment_price: shippingPriceRaw,
       shipment_type: config.shipmentType,
       shipper_address: shipper.address,
       shipper_name: shipper.name,
@@ -713,7 +719,8 @@ serve(async (req) => {
       shipper_postal_code: shipper.postalCode,
       shipper_sub_district_name: shipper.subDistrictName,
       signed_key: String(selectedRate.signed_key),
-      weight: weightGram / 1000,
+      surcharge: Number(selectedRate?.surcharge) || 0,
+      weight: weightGram,
       width: config.widthCm,
     };
 
