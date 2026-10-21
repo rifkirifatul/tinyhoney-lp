@@ -35,7 +35,8 @@
   // --- Checkout / Duitku Payment Module ---
 
   var CHECKOUT_CONFIG = {
-    // Centralized Supabase Edge Function that creates the Duitku transaction.
+    // Server-side amount: the Edge Function recomputes product price, promo,
+    // fresh Everpro shipping cost, and the Duitku payment amount.
     endpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/duitku-lp-order',
     unitPrice: 99000,                // Promo price per bottle (Rp)
     productName: '1 Botol TinyHoney',
@@ -530,17 +531,35 @@
             var shippingCost = Number(values.shipping_cost) || 0;
             var shippingDiscount = computeShippingDiscount(shippingCost, qty);
             var shippingPaid = computeShippingPaid(shippingCost, qty);
+            // Prefer the server-calculated pricing so the WhatsApp summary
+            // cannot drift from the amount sent to Duitku. Use explicit
+            // checks so a legitimate 0 discount/paid value is preserved.
+            var serverPricing = result.pricing || {};
+            var serverShipping = result.shipping || {};
+            var storedSubtotal = (serverPricing.product_total !== undefined && serverPricing.product_total !== null)
+              ? serverPricing.product_total : subtotal;
+            var storedShippingCost = (serverShipping.cost !== undefined && serverShipping.cost !== null)
+              ? serverShipping.cost : shippingCost;
+            var storedShippingDiscount = (serverShipping.discount !== undefined && serverShipping.discount !== null)
+              ? serverShipping.discount : shippingDiscount;
+            var storedShippingPaid = (serverShipping.paid !== undefined && serverShipping.paid !== null)
+              ? serverShipping.paid : shippingPaid;
+            var storedAmount = (result.amount !== undefined && result.amount !== null)
+              ? result.amount
+              : ((serverPricing.total !== undefined && serverPricing.total !== null)
+                ? serverPricing.total
+                : subtotal + shippingPaid);
             window.sessionStorage.setItem('tinyhoney_checkout', JSON.stringify({
               customer_name: values.customer_name,
               phone: values.phone,
               address: values.address,
               quantity: qty,
               payment_method: values.payment_method,
-              subtotal: subtotal,
-              shipping_cost: shippingCost,
-              shipping_discount: shippingDiscount,
-              shipping_paid: shippingPaid,
-              amount: subtotal + shippingPaid,
+              subtotal: storedSubtotal,
+              shipping_cost: storedShippingCost,
+              shipping_discount: storedShippingDiscount,
+              shipping_paid: storedShippingPaid,
+              amount: storedAmount,
               province_name: values.province_name || '',
               city_name: values.city_name || '',
               district_name: values.district_name || '',
@@ -548,11 +567,11 @@
               postal_code: values.postal_code || '',
               destination: buildDestinationLabel(values),
               courier_code: values.courier_code || '',
-              courier_name: values.courier_name || '',
-              courier_service: values.courier_service || '',
+              courier_name: serverShipping.courier_name || values.courier_name || '',
+              courier_service: serverShipping.courier_service || values.courier_service || '',
               courier_etd: values.courier_etd || '',
-              rate_code: values.rate_code || '',
-              logistic_code: values.logistic_code || '',
+              rate_code: serverShipping.rate_code || values.rate_code || '',
+              logistic_code: serverShipping.logistic_code || values.logistic_code || '',
               weight_gram: qty * EVERPRO_CONFIG.weightPerItemGram,
               order_number: result.order_number || null,
               reference: result.duitku.reference || null
@@ -711,6 +730,85 @@
     }
   }
 
+  // --- Payment failure / retry modal ---
+  // Shown when Duitku sends the buyer back with pending, canceled, or unknown
+  // status. A modal is clearer than a browser alert and gives a direct retry.
+  var paymentFailureOverlay = null;
+  var checkoutRetryRequested = false;
+
+  function showPaymentFailurePopup(title, description) {
+    if (typeof document === 'undefined' || !document.body) { return; }
+
+    if (!paymentFailureOverlay) {
+      var overlay = document.createElement('div');
+      overlay.className = 'payment-failure';
+      overlay.setAttribute('role', 'dialog');
+      overlay.setAttribute('aria-modal', 'true');
+      overlay.setAttribute('aria-labelledby', 'payment-failure-title');
+      overlay.innerHTML =
+        '<div class="payment-failure__card">' +
+          '<div class="payment-failure__icon" aria-hidden="true">!</div>' +
+          '<h2 class="payment-failure__title" id="payment-failure-title"></h2>' +
+          '<p class="payment-failure__desc"></p>' +
+          '<div class="payment-failure__actions">' +
+            '<button type="button" class="btn btn--whatsapp btn--promo payment-failure__retry">Ulangi Checkout</button>' +
+            '<button type="button" class="btn btn--secondary payment-failure__close">Tutup</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      paymentFailureOverlay = {
+        element: overlay,
+        title: overlay.querySelector('.payment-failure__title'),
+        description: overlay.querySelector('.payment-failure__desc')
+      };
+      overlay.querySelector('.payment-failure__retry').addEventListener('click', function () {
+        hidePaymentFailurePopup();
+        retryCheckoutFromFailure();
+      });
+      overlay.querySelector('.payment-failure__close').addEventListener('click', function () {
+        hidePaymentFailurePopup();
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && !overlay.hasAttribute('hidden')) {
+          hidePaymentFailurePopup();
+        }
+      });
+    }
+
+    if (paymentFailureOverlay.title) {
+      paymentFailureOverlay.title.textContent = title || 'Pembayaran Belum Berhasil';
+    }
+    if (paymentFailureOverlay.description) {
+      paymentFailureOverlay.description.textContent = description || '';
+    }
+    paymentFailureOverlay.element.removeAttribute('hidden');
+    document.body.classList.add('payment-failure-open');
+    var retryBtn = paymentFailureOverlay.element.querySelector('.payment-failure__retry');
+    if (retryBtn) { retryBtn.focus(); }
+  }
+
+  function hidePaymentFailurePopup() {
+    if (paymentFailureOverlay) {
+      paymentFailureOverlay.element.setAttribute('hidden', '');
+    }
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.classList.remove('payment-failure-open');
+    }
+  }
+
+  function retryCheckoutFromFailure() {
+    // Ask the checkout modal to restore the last cart details before it opens.
+    checkoutRetryRequested = true;
+    var opener = document.querySelector('.js-checkout-open');
+    if (opener) {
+      opener.click();
+      return;
+    }
+    try {
+      window.location.href = window.location.pathname + window.location.hash;
+    } catch (e) { /* ignore */ }
+  }
+
   /**
    * Handles the Duitku redirect back to this landing page (if any).
    * On success, verifies the payment and creates the Everpro order through
@@ -858,16 +956,31 @@
       };
     }
 
-    // Non-success: notify the buyer and clean the URL.
-    try {
-      if (typeof window.alert === 'function') { window.alert(message); }
-    } catch (e) { /* ignore */ }
+    // Non-success: show a clear modal with a retry action, then clean the URL.
+    var failureTitle = 'Pembayaran Belum Berhasil';
+    var failureDescription;
+    if (status === 'pending') {
+      failureDescription = 'Pembayaran Anda masih pending. Jika sudah membayar, mohon tunggu konfirmasi admin. Jika belum, silakan ulangi proses checkout.';
+    } else if (status === 'canceled') {
+      failureDescription = 'Pembayaran dibatalkan atau gagal. Silakan ulangi proses checkout.';
+    } else {
+      failureDescription = 'Status pembayaran tidak dikenali. Silakan ulangi proses checkout.';
+    }
+    if (info.merchantOrderId) {
+      failureDescription += ' Nomor order: ' + info.merchantOrderId + '.';
+    }
 
     try {
       if (window.history && typeof window.history.replaceState === 'function') {
         window.history.replaceState({}, document.title, window.location.pathname + window.location.hash);
       }
     } catch (e) { /* ignore */ }
+
+    try {
+      showPaymentFailurePopup(failureTitle, failureDescription);
+    } catch (e) {
+      if (typeof window.alert === 'function') { window.alert(message); }
+    }
 
     return {
       merchantOrderId: info.merchantOrderId,
@@ -923,7 +1036,8 @@
       selectedRate: null,
       ratesStale: true,
       provincesLoaded: false,
-      ratesRequestId: 0
+      ratesRequestId: 0,
+      pendingRateCode: ''
     };
     var lastFocused = null;
 
@@ -996,6 +1110,18 @@
       if (!subdistrictSelect || subdistrictSelect.selectedIndex < 0) { return ''; }
       var opt = subdistrictSelect.options[subdistrictSelect.selectedIndex];
       return opt.getAttribute('data-postal-code') || '';
+    }
+
+    function selectOptionByName(select, name) {
+      if (!select || !name) { return false; }
+      var i;
+      for (i = 0; i < select.options.length; i++) {
+        if (select.options[i].getAttribute('data-name') === name) {
+          select.selectedIndex = i;
+          return true;
+        }
+      }
+      return false;
     }
 
     async function loadProvinces() {
@@ -1187,6 +1313,21 @@
           shippingOptions.appendChild(label);
         })(rates[i], i);
       }
+
+      // When the buyer retried from the failure modal, try to restore the
+      // courier they picked before the redirect.
+      if (state.pendingRateCode) {
+        var wantedRate = String(state.pendingRateCode);
+        var radios = shippingOptions.querySelectorAll('input[name="shipping_rate"]');
+        for (i = 0; i < rates.length; i++) {
+          if (String(rates[i].rate_code || '') === wantedRate && radios[i]) {
+            radios[i].checked = true;
+            radios[i].dispatchEvent(new Event('change'));
+            break;
+          }
+        }
+        state.pendingRateCode = '';
+      }
     }
 
     function updateSummary() {
@@ -1258,13 +1399,60 @@
       }
     }
 
+    async function prefillCheckoutFromStored() {
+      var stored = getStoredCheckout();
+      if (!stored) { return false; }
+
+      if (nameInput && stored.customer_name) { nameInput.value = stored.customer_name; }
+      if (phoneInput && stored.phone) { phoneInput.value = stored.phone; }
+      if (addressInput && stored.address) { addressInput.value = stored.address; }
+      if (qtyInput && stored.quantity) { qtyInput.value = stored.quantity; }
+      if (paymentSelect && stored.payment_method) { paymentSelect.value = stored.payment_method; }
+      if (stored.rate_code) { state.pendingRateCode = stored.rate_code; }
+
+      await loadProvinces();
+
+      if (provinceSelect && stored.province_name &&
+          selectOptionByName(provinceSelect, stored.province_name)) {
+        await loadCities(provinceSelect.value);
+        if (citySelect && selectOptionByName(citySelect, stored.city_name)) {
+          await loadDistricts(citySelect.value);
+          if (districtSelect && selectOptionByName(districtSelect, stored.district_name)) {
+            await loadSubdistricts(districtSelect.value);
+            if (subdistrictSelect) {
+              selectOptionByName(subdistrictSelect, stored.sub_district_name);
+            }
+            if (postalInput) {
+              postalInput.value = stored.postal_code || getSelectedPostalCode();
+            }
+          }
+        }
+      }
+
+      invalidateRates();
+      updateSummary();
+      return true;
+    }
+
     function openModal() {
       lastFocused = document.activeElement;
       modal.removeAttribute('hidden');
       document.body.classList.add('checkout-open');
       showStep(1);
       updateSummary();
-      loadProvinces();
+
+      var wantsPrefill = checkoutRetryRequested;
+      checkoutRetryRequested = false;
+      if (wantsPrefill) {
+        prefillCheckoutFromStored().then(function (restored) {
+          if (!restored) { loadProvinces(); }
+        }).catch(function () {
+          loadProvinces();
+        });
+      } else {
+        loadProvinces();
+      }
+
       if (nameInput) { nameInput.focus(); }
     }
 

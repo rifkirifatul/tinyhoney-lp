@@ -20,12 +20,15 @@ Browser (static LP)
   │    → Everpro /shipment/v2/rates
   │    → daftar kurir + harga untuk ditampilkan
   │
-  ├─ POST duitku-lp-order / lp-duitku-order
+  ├─ POST duitku-lp-order
   │    → server menghitung ulang produk + ongkir
   │    → membuat transaksi Duitku
-  │    → menyimpan snapshot order (disarankan)
+  │    → menyimpan snapshot order
   │
   ├─ redirect ke halaman pembayaran Duitku
+  │
+  ├─ Duitku callback → POST duitku-lp-order?action=callback
+  │    → verifikasi signature + update snapshot lp_orders
   │
   ├─ Duitku redirect balik ke LP (?resultCode=00)
   │
@@ -134,7 +137,7 @@ Catatan keamanan:
   `regular`, `express`, `same_day`, `instant`. `cargo`/`vehicle` diblokir
   karena sering gagal AWB untuk paket kecil.
 
-### 4.2 `duitku-lp-order` / `lp-duitku-order`
+### 4.2 `duitku-lp-order`
 
 **Tujuan:** membuat transaksi Duitku.
 
@@ -181,9 +184,17 @@ Response:
 }
 ```
 
-**Status TinyHoney:** `duitku-lp-order` saat ini masih memakai `amount` dari
-client. Ini sudah diuji dan terbukti bisa membuat transaksi sandbox Rp1.000.
-Lihat §5 untuk rekomendasi perbaikan.
+**Status TinyHoney:** sudah memakai `duitku-lp-order` (build
+`2026-10-21-server-amount-env`). Function ini mengabaikan `amount`, `subtotal`,
+`shipping_cost`, dan `shipping_discount` dari browser. Ia menghitung ulang
+harga produk, promo, dan ongkir lewat `lp-everpro-rates`, lalu membuat Duitku
+inquiry dengan `paymentAmount` server-side. Kode terbaru menggantikan versi
+lama yang masih mempercayai `amount` dari client; nama function tetap
+`duitku-lp-order`.
+
+Callback Duitku ditangani oleh function yang sama di `?action=callback` dengan
+rumus `HMAC-SHA256(merchantCode + amount + merchantOrderId, apiKey)`. Tidak ada
+function callback terpisah.
 
 ### 4.3 `lp-everpro-create-order`
 
@@ -316,27 +327,30 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
 
 ### Gap yang harus ditutup sebelum production
 
-1. **Nominal Duitku masih dari client.**
-   - `duitku-lp-order` menerima `amount` dari browser.
-   - Bukti: request dengan `amount: 1000` menghasilkan payment URL sandbox
-     Rp1.000.
+1. **Nominal Duitku dari client (historis).**
+   - Versi lama `duitku-lp-order` menerima `amount` dari browser.
+   - Bukti historis: request dengan `amount: 1000` menghasilkan payment URL
+     sandbox Rp1.000.
    - Dampak: pembeli bisa membuat halaman pembayaran murah. Order Everpro tetap
      ditolak karena amount tidak cocok, jadi **tidak bisa mendapat barang**
      dengan harga palsu. Tapi ini tetap masalah integritas pembayaran dan CS.
-   - Perbaikan: hitung amount di server sebelum create transaction, atau buat
-     `lp-duitku-order` khusus LP yang memakai `LP_CONFIGS`.
+   - **Sudah diperbaiki untuk TinyHoney di repo:** kode `duitku-lp-order`
+     (build `2026-10-21-server-amount-env`) sekarang menghitung `paymentAmount`
+     dari `LP_CONFIGS` + rates Everpro dan mengabaikan amount browser. Nama
+     function tetap `duitku-lp-order`; tidak ada function pembayaran baru.
 
-2. **Snapshot order belum disimpan.**
-   - `lp-everpro-create-order` memakai data penerima dari body request.
+2. **Snapshot order belum dipakai oleh create-order.**
+   - `duitku-lp-order` sudah menulis snapshot ke `lp_orders` (best-effort).
+   - `lp-everpro-create-order` masih memakai data penerima dari body request.
    - Jika order number + reference bocor, alamat bisa diganti selama ongkirnya
      sama.
-   - Perbaikan: simpan snapshot di `lp_orders` saat create transaction, lalu
-     create-order memakai snapshot itu.
+   - Perbaikan berikutnya: create-order membaca snapshot `lp_orders` dan
+     mencocokkan `lp_slug`, `quantity`, `rate_code`, dan `amount`.
 
 3. **`lp-everpro-rates` versi lama masih menerima berat/dimensi/harga dari
    client.**
    - Dampak hanya pada tampilan ongkir; create-order menghitung ulang.
-   - Sudah diperbaiki di repo: build `2026-10-21-promo` memakai
+   - Sudah diperbaiki di repo: build `2026-10-21-promo-env` memakai
      `lp_slug` + `quantity` + `LP_CONFIGS`. Tinggal deploy ulang.
 
 4. **Cross-LP replay.**
@@ -349,8 +363,8 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
 | Tes | Hasil yang benar |
 |---|---|
 | Ubah teks harga di Inspect Element | Halaman Duitku tetap nominal asli (karena hanya DOM) |
-| Ubah `CHECKOUT_CONFIG.unitPrice` di console | Halaman Duitku bisa berubah (gap §5.1); create-order harus menolak |
-| Kirim `amount` kecil ke `duitku-lp-order` | Saat ini membuat transaksi murah (gap); create-order menolak |
+| Ubah `CHECKOUT_CONFIG.unitPrice` di console | Halaman Duitku tetap nominal server (`duitku-lp-order` mengabaikan harga client) |
+| Kirim `amount` kecil ke `duitku-lp-order` | Diabaikan; halaman Duitku memakai total server |
 | Panggil `lp-everpro-create-order` tanpa bayar | `402 Pembayaran belum berhasil` |
 | Bayar, lalu ubah `quantity` | `402 Nominal pembayaran tidak cocok` |
 | Pilih `rate_code` cargo | `409 Kurir tidak tersedia` |
@@ -369,7 +383,7 @@ Di `supabase/functions/lp-everpro-create-order/index.ts`, tambah entry baru di
 ```ts
 newlp: {
   unitPrice: envInt("LP_NEWLP_UNIT_PRICE", 99000),
-  freeShippingMax: envInt("LP_NEWLP_SHIPPING_PROMO_MAX", 10000),
+  freeShippingMax: envPositiveInt("LP_NEWLP_FREE_SHIPPING_MAX", 10000),
   freeShippingMinQuantity: envInt("LP_NEWLP_SHIPPING_PROMO_MIN_QTY", 2),
   weightPerItemGram: envInt("LP_NEWLP_WEIGHT_GRAM", 300),
   lengthCm: envInt("LP_NEWLP_LENGTH_CM", 10),
@@ -403,7 +417,7 @@ DUITKU_API_URL=https://sandbox.duitku.com
 DUITKU_API_VERSION=v2
 
 LP_NEWLP_UNIT_PRICE=99000
-LP_NEWLP_SHIPPING_PROMO_MAX=10000
+LP_NEWLP_FREE_SHIPPING_MAX=10000
 LP_NEWLP_SHIPPING_PROMO_MIN_QTY=2
 LP_NEWLP_WEIGHT_GRAM=300
 LP_NEWLP_LENGTH_CM=10
@@ -421,7 +435,7 @@ Tambahkan field shipper per LP di `LP_CONFIGS` (mis. `shipperName`,
 
 ```js
 var CHECKOUT_CONFIG = {
-  endpoint: 'https://<project>.supabase.co/functions/v1/lp-duitku-order',
+  endpoint: 'https://<project>.supabase.co/functions/v1/duitku-lp-order',
   unitPrice: 99000,
   productName: 'Produk Baru',
   landingPageSource: 'newlp',
@@ -475,8 +489,7 @@ rate_code, receiver_*, duitku_reference
 
 1. Deploy `lp-everpro-rates`.
 2. Deploy `lp-everpro-create-order`.
-3. Deploy endpoint pembayaran (`lp-duitku-order` atau `duitku-lp-order` yang
-   sudah dipatch).
+3. Deploy `duitku-lp-order` (`--no-verify-jwt`). Callback Duitku memakai function yang sama (`?action=callback`).
 4. Publish LP dengan cache-bust baru.
 5. Tes rates, satu transaksi kecil, AWB, dan print label.
 6. Cek log build marker di Supabase Functions.
@@ -582,33 +595,38 @@ transaksi agar amount, alamat, dan status tidak bisa diubah dari browser.
 Setiap function punya `FUNCTION_BUILD`. Ganti saat deploy agar log membuktikan
 versi yang berjalan.
 
-- `lp-everpro-rates`: `2026-10-21-promo`
-- `lp-everpro-create-order`: `2026-10-21-promo`
-- Client: `index.html` → `js/main.js?v=20261021-6`
+- `lp-everpro-rates`: `2026-10-21-promo-env`
+- `lp-everpro-create-order`: `2026-10-21-promo-env`
+- `duitku-lp-order`: `2026-10-21-server-amount-env`
+- Client: `index.html` → `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
 
 Saat mengubah kode, naikkan marker dan cache-bust. Jangan mengandalkan cache
 browser.
 
-File `LP-EVERPRO-*-LATEST.txt` adalah salinan untuk copy-paste ke dashboard
-Supabase. Sumber kebenaran tetap `supabase/functions/*/index.ts`; regenerate
-file `.txt` setiap kali function berubah.
+File `LP-*-LATEST.txt` (Everpro) dan `DUITKU-LP-ORDER-LATEST.txt` (Duitku)
+adalah salinan untuk copy-paste ke dashboard Supabase. Sumber kebenaran tetap
+`supabase/functions/*/index.ts`; regenerate file `.txt` setiap kali function
+berubah.
 
 ---
 
 ## 11. Hardening berikutnya (urutan prioritas)
 
-1. **Server-side amount untuk Duitku.** Ini yang paling penting. Patch
-   `duitku-lp-order` atau buat `lp-duitku-order` yang memakai `LP_CONFIGS`.
-2. **Snapshot order di `lp_orders`.** Bind amount + alamat + rate_code ke order
-   number.
+1. ~~**Server-side amount untuk Duitku.**~~ Selesai di repo: `duitku-lp-order`
+   build `2026-10-21-server-amount-env` memakai `LP_CONFIGS` + rates server-side.
+   Deploy dan test satu transaksi sandbox.
+2. **Snapshot order di `lp_orders`.** `duitku-lp-order` sudah menulis snapshot;
+   langkah berikutnya adalah membuat `lp-everpro-create-order` membaca snapshot
+   itu dan mencocokkan amount + alamat + rate_code + `lp_slug`.
 3. ~~**`lp-everpro-rates` server-side config.**~~ Selesai di repo: build
-   `2026-10-21-promo` memakai `lp_slug` + `quantity` + `LP_CONFIGS`.
+   `2026-10-21-promo-env` memakai `lp_slug` + `quantity` + `LP_CONFIGS`.
    Pastikan sudah ter-deploy.
 4. ~~**Filter array `flattenRates`.**~~ Selesai di repo: build
    `2026-10-21-hardened` memfilter array response juga, bukan hanya object
    bergrup.
 5. **Rate limiting** untuk endpoint publik.
-6. **Callback key** yang kuat dan update `lp_orders` dari callback.
+6. **Callback key Everpro** yang kuat dan update `lp_orders` dari callback
+   AWB/tracking. Callback Duitku sudah ditangani `duitku-lp-order`.
 7. **Test otomatis** untuk kasus amount mismatch, unpaid, cargo, dan replay.
 
 ---

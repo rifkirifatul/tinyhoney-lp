@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-promo";
+const FUNCTION_BUILD = "2026-10-21-promo-env";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -25,6 +25,13 @@ function envInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+// Env yang dipakai untuk promo harus > 0. Kalau secret lama bernilai 0
+// (mis. FREE_SHIPPING_MAX dari fitur lama), jangan sampai promo mati.
+function envPositiveInt(name: string, fallback: number): number {
+  const parsed = parseInt(Deno.env.get(name) || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 const LP_CONFIGS: Record<string, {
   unitPrice: number;
   freeShippingMax: number;
@@ -40,9 +47,9 @@ const LP_CONFIGS: Record<string, {
   tinyhoney: {
     unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 99000),
     // Promo ongkir: 100% discount, capped at Rp10.000, minimum 2 bottles.
-    // New env names intentionally avoid the old FREE_SHIPPING_MAX=0 secret.
-    freeShippingMax: envInt("LP_TINYHONEY_SHIPPING_PROMO_MAX", 10000),
-    freeShippingMinQuantity: envInt("LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY", 2),
+    // Pakai nama env yang sudah ada di Supabase, jangan bikin nama baru.
+    freeShippingMax: envPositiveInt("LP_TINYHONEY_FREE_SHIPPING_MAX", 10000),
+    freeShippingMinQuantity: envPositiveInt("LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY", 2),
     weightPerItemGram: envInt("LP_TINYHONEY_WEIGHT_GRAM", 175),
     lengthCm: envInt("LP_TINYHONEY_LENGTH_CM", 6),
     widthCm: envInt("LP_TINYHONEY_WIDTH_CM", 6),

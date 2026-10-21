@@ -5,26 +5,30 @@
 > the architecture, endpoint contracts, security invariants, and the checklist
 > for onboarding the next landing page.
 
-> **Important:** Deploy both functions before publishing the updated LP. The old
-> `lp-everpro-create-order` did not verify the Duitku payment. Overwrite it with
-> the code in this folder first, then publish the static site.
+> **Important:** Deploy the functions below before publishing the updated LP. The
+> old `lp-everpro-create-order` did not verify the Duitku payment. Overwrite it
+> with the code in this folder first, then publish the static site.
 
-> **Known gap before production:** `duitku-lp-order` still accepts the
-> `amount` sent by the browser. A manipulated amount can create a cheap Duitku
-> payment page, but `lp-everpro-create-order` rejects the shipment because the
-> paid amount does not match the server total. The payment amount must be
-> computed server-side (or the LP must use a dedicated payment function) before
-> go-live. See §5 of the integration guide.
+> **Known gap closed for this LP (after deployment):** the LP calls the existing
+> `duitku-lp-order` function, which now recomputes the product price, promo,
+> fresh Everpro shipping rate, and Duitku `paymentAmount` on the server. The old
+> version trusted the browser `amount`; replace it with the version in this
+> repository. No new payment function name is needed.
 
 These functions are isolated from the main webstore functions:
 
 - `lp-everpro-rates` — province/city/district/subdistrict lookup still uses the existing `everpro-*` functions; rates now use this LP-specific function. For a known `lp_slug`, it resolves weight, dimensions, item price, origin, and shipment type from `LP_CONFIGS`; the browser only sends `quantity`, destination, and courier filters.
 - `lp-everpro-create-order` — verifies the Duitku payment, recalculates the rate, and creates the Everpro shipment order.
+- `duitku-lp-order` — recomputes the product total, promo, and **fresh** shipping cost server-side, then creates the Duitku v2 inquiry. The browser amount is ignored. The same function handles the Duitku callback at `?action=callback`, so no separate callback function is required.
 
 ## Security flow
 
 1. The LP sends the destination and selected courier to the browser.
-2. The browser creates a Duitku transaction through `duitku-lp-order`.
+2. The browser asks `duitku-lp-order` to create the payment. That function:
+   - recomputes `quantity × unitPrice` from `LP_CONFIGS`;
+   - calls `lp-everpro-rates` again for the selected `rate_code`;
+   - applies the promo to the product value, not to Everpro `shipment_price`;
+   - sends the server-calculated `paymentAmount` to Duitku.
 3. After Duitku redirects back with `resultCode=00`, the LP calls `lp-everpro-create-order`.
 4. `lp-everpro-create-order` **does not trust client prices**. It:
    - verifies the transaction with Duitku `transactionStatus`;
@@ -113,13 +117,22 @@ SHIPPER_SUB_DISTRICT_NAME=Manjahlega
 
 DUITKU_MERCHANT_CODE=...
 DUITKU_API_KEY=...
-DUITKU_API_URL=https://sandbox.duitku.com   # or https://passport.duitku.com
+DUITKU_ENV=sandbox                          # optional; also detected from DUITKU_API_URL
+DUITKU_API_URL=https://sandbox.duitku.com   # v2 inquiry + transactionStatus
+DUITKU_CALLBACK_URL=https://<project>.supabase.co/functions/v1/duitku-lp-order?action=callback  # optional; this is the default
+DUITKU_DEFAULT_EMAIL=admin@tinyhoney.id     # optional
+DUITKU_EXPIRY_MINUTES=60                    # optional
 DUITKU_API_VERSION=v2                       # optional; v2 is the default
 ```
 
-`duitku-lp-order` currently uses Duitku v2 (`sandbox.duitku.com` / `passport.duitku.com`), so these defaults match it. `DUITKU_API_URL` can be omitted if `DUITKU_ENV=production` or `DUITKU_IS_PRODUCTION=true` is set.
+`duitku-lp-order` uses Duitku v2 (`sandbox.duitku.com` /
+`passport.duitku.com`). `DUITKU_API_URL` is used by both
+`duitku-lp-order` and `lp-everpro-create-order` to create the payment and call
+`transactionStatus`. If `DUITKU_CALLBACK_URL` is omitted, the function uses the
+same endpoint with `?action=callback`, so no separate callback function is
+needed.
 
-If the project ever uses the legacy Duitku v1 API, set:
+If the project ever uses the legacy Duitku v1 API for the status check, set:
 
 ```text
 DUITKU_API_URL=https://api-sandbox.duitku.com
@@ -135,7 +148,7 @@ Optional product overrides:
 
 ```text
 LP_TINYHONEY_UNIT_PRICE=99000
-LP_TINYHONEY_SHIPPING_PROMO_MAX=10000
+LP_TINYHONEY_FREE_SHIPPING_MAX=10000
 LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY=2
 LP_TINYHONEY_WEIGHT_GRAM=175
 LP_TINYHONEY_LENGTH_CM=6
@@ -148,9 +161,19 @@ The defaults already match the current LP. Keep the LP's
 `CHECKOUT_CONFIG.unitPrice`, `freeShippingMax`, and
 `freeShippingMinQuantity` in sync with these values.
 
-> The old `LP_TINYHONEY_FREE_SHIPPING_MAX` secret is no longer read. The new
-> promo uses `LP_TINYHONEY_SHIPPING_PROMO_MAX` so an old `0` value cannot
-> silently disable the promo.
+> `LP_TINYHONEY_FREE_SHIPPING_MAX` adalah nama env yang sudah ada di Supabase.
+> Set nilainya ke `10000`. Kalau nilainya kosong atau `0`, function memakai
+> fallback `10000` agar promo tidak mati tanpa sengaja. Tidak ada env promo
+> baru; env yang dipakai tetap `LP_TINYHONEY_FREE_SHIPPING_MAX` dan
+> `LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY`.
+
+`duitku-lp-order` **tidak menambah env wajib**. Function ini memakai env Duitku
+yang sudah ada (`DUITKU_MERCHANT_CODE`, `DUITKU_API_KEY`, `DUITKU_API_URL`).
+Env opsional: `DUITKU_CALLBACK_URL` (default otomatis ke
+`<SUPABASE_URL>/functions/v1/duitku-lp-order?action=callback`) dan
+`DUITKU_DEFAULT_EMAIL` (default `admin@tinyhoney.id`). `SUPABASE_URL` dan
+`SUPABASE_SERVICE_ROLE_KEY`/`SUPABASE_ANON_KEY` disediakan otomatis oleh
+Supabase.
 
 ### Shipping promo
 
@@ -182,25 +205,44 @@ The buyer still pays `productTotal + shippingCost - discount`, which equals
 
 Current build markers:
 
-- `lp-everpro-rates`: `2026-10-21-promo`
-- `lp-everpro-create-order`: `2026-10-21-promo`
-- Client: `js/main.js?v=20261021-6`
+- `lp-everpro-rates`: `2026-10-21-promo-env`
+- `lp-everpro-create-order`: `2026-10-21-promo-env`
+- `duitku-lp-order`: `2026-10-21-server-amount-env`
+- Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
 
 From the repository root:
 
 ```bash
 supabase functions deploy lp-everpro-rates --no-verify-jwt
 supabase functions deploy lp-everpro-create-order --no-verify-jwt
+supabase functions deploy duitku-lp-order --no-verify-jwt
 ```
 
 If the functions are managed from the Supabase Dashboard, paste the contents of each `index.ts` into the corresponding function editor and deploy.
 
+> **Dashboard setting:** set **Verify JWT** to **off** for
+> `lp-everpro-rates`, `lp-everpro-create-order`, and `duitku-lp-order`. The LP
+> calls these from the browser, and Duitku calls the callback without a
+> Supabase JWT.
+
+> **Deploy order:** deploy `lp-everpro-rates` and `lp-everpro-create-order`
+> first, then update the existing `duitku-lp-order` function, then publish the
+> LP. The payment function calls `lp-everpro-rates`, so it must exist before a
+> buyer opens checkout.
+>
 > **Price sync:** set `LP_TINYHONEY_UNIT_PRICE=99000` and publish the LP with
-> `js/main.js?v=20261021-6` at the same time. If the client and server prices
+> `js/main.js?v=20261021-10` at the same time. If the client and server prices
 > differ, `lp-everpro-create-order` rejects the order with
 > `Nominal pembayaran tidak cocok`. Existing open tabs may need a hard refresh.
 
-## Callback endpoints
+## Callback endpoint
+
+The **Duitku payment callback** is handled by `duitku-lp-order` at
+`?action=callback`. It verifies
+`HMAC-SHA256(merchantCode + amount + merchantOrderId, apiKey)` and returns
+`SUCCESS` with HTTP 200. It is informational only: `lp-everpro-create-order`
+still verifies the transaction with `transactionStatus` before creating a
+shipment.
 
 `lp-everpro-awb-callback` and `lp-everpro-tracking-callback` are **Everpro webhooks**, not LP endpoints.
 
@@ -209,4 +251,9 @@ If the functions are managed from the Supabase Dashboard, paste the contents of 
 - Both must verify a callback key (they currently return `401 Unauthorized callback key` without it).
 - They only make sense once LP orders are persisted in a table. For now the LP does not depend on them; the admin can generate AWB and request pickup from the Everpro dashboard.
 
-Future improvement: add an `lp_orders` table with `order_number`, `everpro_order_no`, `awb_number`, `tracking_status`, and `buyer_phone`, then have the callbacks update that table and optionally trigger a WhatsApp notification.
+The optional `lp_orders` snapshot schema is in
+[`sql/lp_orders.sql`](sql/lp_orders.sql). `duitku-lp-order` writes the snapshot
+and its callback mode marks it paid; `lp-everpro-create-order` still verifies
+the payment independently. Future improvement: have the Everpro callbacks
+update `everpro_order_no`, `awb_number`, and `tracking_status`, then optionally
+trigger a WhatsApp notification.

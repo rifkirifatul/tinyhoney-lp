@@ -7,3 +7,6 @@ verify_jwt = false
 
 [functions.lp-everpro-create-order]
 verify_jwt = false
+
+[functions.duitku-lp-order]
+verify_jwt = false

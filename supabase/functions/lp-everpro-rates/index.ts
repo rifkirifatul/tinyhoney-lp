@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-promo";
+const FUNCTION_BUILD = "2026-10-21-promo-env";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,14 +42,8 @@ const LP_CONFIGS: Record<string, {
     heightCm: envInt("LP_TINYHONEY_HEIGHT_CM", 11),
     packageTypeId: 1,
     shipmentType: "PICKUP",
-    originPostalCode:
-      Deno.env.get("LP_TINYHONEY_ORIGIN_POSTAL_CODE") ||
-      Deno.env.get("SHIPPER_POSTAL_CODE") ||
-      "40286",
-    originSubDistrictName:
-      Deno.env.get("LP_TINYHONEY_ORIGIN_SUB_DISTRICT_NAME") ||
-      Deno.env.get("SHIPPER_SUB_DISTRICT_NAME") ||
-      "Manjahlega",
+    originPostalCode: Deno.env.get("SHIPPER_POSTAL_CODE") || "40286",
+    originSubDistrictName: Deno.env.get("SHIPPER_SUB_DISTRICT_NAME") || "Manjahlega",
   },
 };
 

@@ -30,19 +30,21 @@ Duitku payments and Everpro shipping.
    rates with the discounted `item_price` so `signed_key` stays valid.
 8. After editing `js/main.js`, bump the cache-bust in `index.html`
    (`js/main.js?v=...`). After editing an Edge Function, bump `FUNCTION_BUILD`.
-9. `duitku-lp-order` currently trusts the client `amount`. This is a known gap.
-   The shipment gatekeeper rejects mismatches, but the payment page amount must
-   be moved server-side before production. See §5 of the integration guide.
+9. The LP must call the existing `duitku-lp-order`, which computes the Duitku
+   `paymentAmount` server-side from `LP_CONFIGS` + fresh `lp-everpro-rates`
+   rates. Do not create a second payment function with a different name. The
+   same function handles Duitku callbacks at `?action=callback`; no separate
+   callback function is required.
 
 ## Adding a new LP
 
 Follow §6 of `docs/LP-INTEGRATION-GUIDE.md`. In short:
 
-1. Add one `LP_CONFIGS` entry in both `lp-everpro-rates` and
-   `lp-everpro-create-order`.
+1. Add one `LP_CONFIGS` entry in `lp-everpro-rates`,
+   `lp-everpro-create-order`, and `duitku-lp-order`.
 2. Add `LP_<SLUG>_*` env vars and Everpro/Duitku secrets.
 3. Add the client config with `landingPageSource` matching the config key.
-4. Compute the Duitku amount server-side.
+4. Compute the Duitku amount server-side (`duitku-lp-order` does this).
 5. Store an order snapshot in `lp_orders` (recommended).
 6. Deploy functions, publish the LP with a new cache-bust, and test rates + one
    small transaction through AWB.
