@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-kg-rupiah";
+const FUNCTION_BUILD = "2026-10-21-no-cargo";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -180,7 +180,9 @@ function flattenRates(data: any): any[] {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data.rates)) return data.rates;
 
-  const groups = ["regular", "express", "same_day", "instant", "cargo", "vehicle"];
+  // TinyHoney is a small parcel. Cargo/vehicle services often reject AWB
+  // generation for this weight, so the server refuses to select them too.
+  const groups = ["regular", "express", "same_day", "instant"];
   const rows: any[] = [];
   for (const group of groups) {
     if (Array.isArray(data[group])) rows.push(...data[group]);

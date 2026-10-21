@@ -252,7 +252,9 @@
    */
   function flattenRates(data) {
     if (!data) { return []; }
-    var groups = ['regular', 'express', 'same_day', 'instant', 'cargo', 'vehicle'];
+    // TinyHoney is a small parcel. Cargo/vehicle services often reject AWB
+    // generation for this weight, so do not offer them to the buyer.
+    var groups = ['regular', 'express', 'same_day', 'instant'];
     var out = [];
     var i;
     var j;

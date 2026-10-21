@@ -49,6 +49,13 @@ TinyHoney warehouse. This value must match in two places:
 To switch to `DROP`, change both values to `DROP`, redeploy the function, and
 publish the LP. Rates and the paid amount must be recalculated after switching.
 
+### Courier services
+
+The LP only offers `regular`, `express`, `same_day`, and `instant` rates. Cargo
+and vehicle services are excluded because they often reject AWB generation for
+small parcels such as TinyHoney. The create-order function applies the same
+filter server-side.
+
 ### Everpro signed_key
 
 Everpro validates `signed_key` against the values used by get-rates. The
