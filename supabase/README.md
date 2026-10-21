@@ -134,8 +134,9 @@ The function supports both signature modes:
 Optional product overrides:
 
 ```text
-LP_TINYHONEY_UNIT_PRICE=129000
-LP_TINYHONEY_FREE_SHIPPING_MAX=0
+LP_TINYHONEY_UNIT_PRICE=99000
+LP_TINYHONEY_SHIPPING_PROMO_MAX=10000
+LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY=2
 LP_TINYHONEY_WEIGHT_GRAM=175
 LP_TINYHONEY_LENGTH_CM=6
 LP_TINYHONEY_WIDTH_CM=6
@@ -143,26 +144,47 @@ LP_TINYHONEY_HEIGHT_CM=11
 LP_TINYHONEY_PRODUCT_NAME=TinyHoney
 ```
 
-The defaults already match the current LP. Keep the LP's `CHECKOUT_CONFIG.unitPrice` and `freeShippingMax` in sync with these values.
+The defaults already match the current LP. Keep the LP's
+`CHECKOUT_CONFIG.unitPrice`, `freeShippingMax`, and
+`freeShippingMinQuantity` in sync with these values.
 
-### Free-shipping promo
+> The old `LP_TINYHONEY_FREE_SHIPPING_MAX` secret is no longer read. The new
+> promo uses `LP_TINYHONEY_SHIPPING_PROMO_MAX` so an old `0` value cannot
+> silently disable the promo.
 
-The free-shipping promo is **currently disabled**:
+### Shipping promo
 
-- `LP_TINYHONEY_FREE_SHIPPING_MAX=0`
-- `CHECKOUT_CONFIG.freeShippingMax = 0` in `js/main.js`
+The current promo is:
 
-The promotional copy can stay on the landing page, but no shipping discount is applied to the amount. To re-enable it later, set both values to the same cap (for example `30000`) and redeploy the function.
+- **100% shipping discount**, capped at **Rp10.000**;
+- **minimum 2 bottles**;
+- shown to the buyer as `Diskon Ongkir`;
+- applied to the **product value** in the Everpro payload
+  (`package_price = productTotal - discount`), not to `shipment_price`.
 
-Buyers pay the shipping cost added by the server. If the client and server caps differ, `lp-everpro-create-order` rejects the order with `Nominal pembayaran tidak cocok` to prevent underpayment.
+Why not reduce `shipment_price`? Everpro validates `signed_key` against the
+rate it quoted. Reducing `shipment_price` makes the create-order signature
+invalid. The function therefore:
+
+1. fetches rates with the normal product total to discover the shipping cost;
+2. calculates the promo discount and `package_price`;
+3. if the promo applies, re-fetches rates with `item_price = package_price`;
+4. verifies the shipping price is unchanged;
+5. creates the Everpro order with the new `package_price` and the original
+   shipping price.
+
+The buyer still pays `productTotal + shippingCost - discount`, which equals
+`package_price + shippingCost`. If the client and server promo values differ,
+`lp-everpro-create-order` rejects the order with
+`Nominal pembayaran tidak cocok`.
 
 ## Deploy
 
 Current build markers:
 
-- `lp-everpro-rates`: `2026-10-21-server-config`
-- `lp-everpro-create-order`: `2026-10-21-hardened`
-- Client: `js/main.js?v=20261021-5`
+- `lp-everpro-rates`: `2026-10-21-promo`
+- `lp-everpro-create-order`: `2026-10-21-promo`
+- Client: `js/main.js?v=20261021-6`
 
 From the repository root:
 
@@ -172,6 +194,11 @@ supabase functions deploy lp-everpro-create-order --no-verify-jwt
 ```
 
 If the functions are managed from the Supabase Dashboard, paste the contents of each `index.ts` into the corresponding function editor and deploy.
+
+> **Price sync:** set `LP_TINYHONEY_UNIT_PRICE=99000` and publish the LP with
+> `js/main.js?v=20261021-6` at the same time. If the client and server prices
+> differ, `lp-everpro-create-order` rejects the order with
+> `Nominal pembayaran tidak cocok`. Existing open tabs may need a hard refresh.
 
 ## Callback endpoints
 

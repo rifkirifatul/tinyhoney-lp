@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-hardened";
+const FUNCTION_BUILD = "2026-10-21-promo";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +28,7 @@ function envInt(name: string, fallback: number): number {
 const LP_CONFIGS: Record<string, {
   unitPrice: number;
   freeShippingMax: number;
+  freeShippingMinQuantity: number;
   weightPerItemGram: number;
   lengthCm: number;
   widthCm: number;
@@ -37,10 +38,11 @@ const LP_CONFIGS: Record<string, {
   shipmentType: string;
 }> = {
   tinyhoney: {
-    unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 129000),
-    // Promo free shipping is currently disabled. Set the env to 30000 (and
-    // update CHECKOUT_CONFIG.freeShippingMax in js/main.js) to re-enable it.
-    freeShippingMax: envInt("LP_TINYHONEY_FREE_SHIPPING_MAX", 0),
+    unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 99000),
+    // Promo ongkir: 100% discount, capped at Rp10.000, minimum 2 bottles.
+    // New env names intentionally avoid the old FREE_SHIPPING_MAX=0 secret.
+    freeShippingMax: envInt("LP_TINYHONEY_SHIPPING_PROMO_MAX", 10000),
+    freeShippingMinQuantity: envInt("LP_TINYHONEY_SHIPPING_PROMO_MIN_QTY", 2),
     weightPerItemGram: envInt("LP_TINYHONEY_WEIGHT_GRAM", 175),
     lengthCm: envInt("LP_TINYHONEY_LENGTH_CM", 6),
     widthCm: envInt("LP_TINYHONEY_WIDTH_CM", 6),
@@ -641,7 +643,7 @@ serve(async (req) => {
     const productTotal = quantity * config.unitPrice;
     const weightGram = quantity * config.weightPerItemGram;
 
-    const ratesJson = await fetchEverproRates(apiUrl, token, {
+    const rateRequest: Record<string, unknown> = {
       origin_postal_code: shipper.postalCode,
       origin_sub_district_name: shipper.subDistrictName,
       destination_postal_code: receiver.postalCode,
@@ -656,23 +658,59 @@ serve(async (req) => {
       width: config.widthCm,
       height: config.heightCm,
       length: config.lengthCm,
-    });
+    };
 
-    const rates = flattenRates(ratesJson?.data);
-    const selectedRate = selectRate(rates, rateCode, courierName, courierService);
-    const shippingCost = normalizeRatePrice(selectedRate?.price);
-    // Everpro signs the raw rate values. Keep the raw price (cents) for the
-    // create-order payload, and use the normalized Rupiah value for Duitku.
-    const shippingPriceRaw = Math.round(Number(selectedRate?.price) || 0);
+    const ratesJson = await fetchEverproRates(apiUrl, token, rateRequest);
+    let selectedRate = selectRate(
+      flattenRates(ratesJson?.data),
+      rateCode,
+      courierName,
+      courierService,
+    );
+    let shippingCost = normalizeRatePrice(selectedRate?.price);
     if (!Number.isFinite(shippingCost) || shippingCost <= 0) {
       throw new HttpError(
         502,
         "Everpro tidak mengembalikan harga ongkir yang valid untuk kurir ini.",
       );
     }
-    const shippingDiscount = Math.min(shippingCost, config.freeShippingMax);
+
+    // Promo ongkir: the buyer sees a shipping discount, but Everpro must keep
+    // shipment_price equal to the rate it quoted. Apply the discount to the
+    // product value instead (package_price), then re-fetch rates with that
+    // package_price so the signed_key matches the create-order payload.
+    const shippingDiscount = quantity >= config.freeShippingMinQuantity
+      ? Math.min(shippingCost, config.freeShippingMax, productTotal)
+      : 0;
+    const packagePrice = productTotal - shippingDiscount;
+
+    if (shippingDiscount > 0) {
+      const promoRatesJson = await fetchEverproRates(apiUrl, token, {
+        ...rateRequest,
+        item_price: packagePrice,
+      });
+      const promoRate = selectRate(
+        flattenRates(promoRatesJson?.data),
+        rateCode,
+        courierName,
+        courierService,
+      );
+      const promoShippingCost = normalizeRatePrice(promoRate?.price);
+      if (promoShippingCost !== shippingCost) {
+        throw new HttpError(
+          409,
+          "Ongkir berubah saat promo diterapkan. Silakan ulangi checkout.",
+        );
+      }
+      selectedRate = promoRate;
+      shippingCost = promoShippingCost;
+    }
+
+    // Everpro signs the raw rate values. Keep the raw price for the
+    // create-order payload, and use the normalized Rupiah value for Duitku.
+    const shippingPriceRaw = Math.round(Number(selectedRate?.price) || 0);
     const shippingPaid = shippingCost - shippingDiscount;
-    const expectedTotal = productTotal + shippingPaid;
+    const expectedTotal = packagePrice + shippingCost;
 
     if (!Number.isFinite(payment.amount) || payment.amount !== expectedTotal) {
       throw new HttpError(
@@ -713,7 +751,9 @@ serve(async (req) => {
       max_duration: Number(selectedRate?.max_duration) || 3,
       min_duration: Number(selectedRate?.min_duration) || 1,
       package_desc: `${config.productName} x${quantity}`,
-      package_price: productTotal,
+      // The promo discount is applied here, not to shipment_price. This keeps
+      // Everpro's shipping price identical to the rate returned by the courier.
+      package_price: packagePrice,
       package_type_id: config.packageTypeId,
       // Required by Everpro. The buyer never chooses this; the server uses the
       // earliest available slot (or a safe default) and the admin can
@@ -807,6 +847,16 @@ serve(async (req) => {
         amount: payment.amount,
         reference: payment.reference,
       },
+      pricing: {
+        product_total: productTotal,
+        // The promo is deducted from the product value, not from Everpro's
+        // shipment_price.
+        product_discount: shippingDiscount,
+        package_price: packagePrice,
+        shipping_cost: shippingCost,
+        shipping_paid: shippingPaid,
+        total: expectedTotal,
+      },
       shipping: {
         courier_name: selectedRate?.logistic_name || courierName,
         courier_service: selectedRate?.rate_name || "",
@@ -814,6 +864,7 @@ serve(async (req) => {
         cost: shippingCost,
         discount: shippingDiscount,
         paid: shippingPaid,
+        package_price: packagePrice,
       },
       everpro_response: createJson,
     });

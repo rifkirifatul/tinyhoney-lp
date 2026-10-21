@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-server-config";
+const FUNCTION_BUILD = "2026-10-21-promo";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -35,7 +35,7 @@ const LP_CONFIGS: Record<string, {
   originSubDistrictName: string;
 }> = {
   tinyhoney: {
-    unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 129000),
+    unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 99000),
     weightPerItemGram: envInt("LP_TINYHONEY_WEIGHT_GRAM", 175),
     lengthCm: envInt("LP_TINYHONEY_LENGTH_CM", 6),
     widthCm: envInt("LP_TINYHONEY_WIDTH_CM", 6),

@@ -57,7 +57,7 @@ Prinsip pemisahan:
 | Berat per item | `LP_CONFIGS` / env `LP_<SLUG>_WEIGHT_GRAM` | Tidak |
 | Dimensi | `LP_CONFIGS` / env | Tidak |
 | Origin/shipper | env `SHIPPER_*` atau config LP | Tidak |
-| Free shipping | `LP_CONFIGS` / env | Tidak |
+| Promo ongkir (min qty + max diskon) | `LP_CONFIGS` / env | Tidak |
 | Ongkir | Everpro rates, dihitung ulang server | Tidak |
 | Kurir yang boleh dipilih | filter grup di server | Tidak |
 | Nominal Duitku | **harus** dihitung server sebelum create transaction | Saat ini belum (lihat §5) |
@@ -74,8 +74,9 @@ Prinsip pemisahan:
 4. LP minta **server** membuat transaksi Duitku. Server menghitung:
    ```text
    product_total = quantity × unit_price
-   shipping_paid = shipping_cost - shipping_discount
-   amount        = product_total + shipping_paid
+   discount      = quantity >= min_qty ? min(shipping_cost, max_discount) : 0
+   package_price = product_total - discount
+   amount        = package_price + shipping_cost
    ```
 5. Server menyimpan snapshot checkout (order number, amount, alamat, rate_code,
    quantity, lp_slug) ke tabel `lp_orders`.
@@ -214,7 +215,8 @@ Verifikasi server (urutan penting):
 3. Duitku `transactionStatus`: `resultCode = 00`.
 4. `merchantOrderId` cocok.
 5. `reference` cocok.
-6. `amount` Duitku = `quantity × server_unit_price + server_shipping`.
+6. `amount` Duitku = `package_price + shipping_cost`, di mana
+   `package_price = product_total - promo_discount`.
 7. `rate_code` ada di rates Everpro yang dihitung ulang.
 8. `signed_key` ada.
 9. `pickup_time` dipilih server (RFC3339, skip Minggu).
@@ -235,13 +237,47 @@ Response sukses:
     "courier_service": "Regular",
     "rate_code": "UDRREG",
     "cost": 5000,
-    "discount": 0,
-    "paid": 5000
+    "discount": 5000,
+    "paid": 0,
+    "package_price": 193000
   }
 }
 ```
 
-### 4.4 Callback Everpro
+### 4.4 Shipping promo (TinyHoney)
+
+Aturan promo:
+
+- aktif jika `quantity >= 2`;
+- diskon 100% dari ongkir, maksimal **Rp10.000**;
+- pembeli melihatnya sebagai **Diskon Ongkir**;
+- di Everpro, diskon dipotong dari `package_price`, **bukan** dari
+  `shipment_price`.
+
+Contoh untuk 2 botol, harga 99.000, ongkir 5.000:
+
+```text
+product_total   = 2 × 99.000 = 198.000
+shipping_cost   = 5.000
+discount        = min(5.000, 10.000) = 5.000
+package_price   = 198.000 - 5.000 = 193.000
+shipping_paid   = 0
+amount          = 193.000 + 5.000 = 198.000
+```
+
+Payload Everpro:
+
+```text
+package_price  = 193.000
+shipment_price = 5.000   ← tetap sama dengan rate Everpro
+```
+
+Karena `signed_key` Everpro dihitung dari `item_price` saat get-rates, function
+melakukan get-rates kedua dengan `item_price = package_price` jika promo aktif.
+Harga ongkir dari get-rates kedua harus sama dengan yang pertama; kalau berbeda,
+function menolak order dengan `409` agar pembeli tidak melihat harga yang beda.
+
+### 4.5 Callback Everpro
 
 - `everpro-awb-callback`: event AWB.
 - `everpro-tracking-callback`: event tracking.
@@ -258,10 +294,12 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
 
 ### Sudah aman
 
-- **Harga produk, berat, dimensi, origin, shipper, free shipping** dihitung di
+- **Harga produk, berat, dimensi, origin, shipper, promo ongkir** dihitung di
   `lp-everpro-create-order`, bukan dari body request.
 - **Ongkir** dihitung ulang dari Everpro saat create-order. `rate_code` harus
   ada di response rates yang baru.
+- **Promo ongkir** dipotong dari `package_price`, bukan `shipment_price`.
+  `shipment_price` tetap sama dengan rate Everpro, sehingga `signed_key` valid.
 - **Pembayaran** diverifikasi ke Duitku, termasuk `resultCode`, `reference`,
   dan `amount`.
 - **Order tanpa pembayaran** ditolak (`402`) — sudah diuji.
@@ -298,7 +336,7 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
 3. **`lp-everpro-rates` versi lama masih menerima berat/dimensi/harga dari
    client.**
    - Dampak hanya pada tampilan ongkir; create-order menghitung ulang.
-   - Sudah diperbaiki di repo: build `2026-10-21-server-config` memakai
+   - Sudah diperbaiki di repo: build `2026-10-21-promo` memakai
      `lp_slug` + `quantity` + `LP_CONFIGS`. Tinggal deploy ulang.
 
 4. **Cross-LP replay.**
@@ -331,7 +369,8 @@ Di `supabase/functions/lp-everpro-create-order/index.ts`, tambah entry baru di
 ```ts
 newlp: {
   unitPrice: envInt("LP_NEWLP_UNIT_PRICE", 99000),
-  freeShippingMax: envInt("LP_NEWLP_FREE_SHIPPING_MAX", 0),
+  freeShippingMax: envInt("LP_NEWLP_SHIPPING_PROMO_MAX", 10000),
+  freeShippingMinQuantity: envInt("LP_NEWLP_SHIPPING_PROMO_MIN_QTY", 2),
   weightPerItemGram: envInt("LP_NEWLP_WEIGHT_GRAM", 300),
   lengthCm: envInt("LP_NEWLP_LENGTH_CM", 10),
   widthCm: envInt("LP_NEWLP_WIDTH_CM", 10),
@@ -364,6 +403,8 @@ DUITKU_API_URL=https://sandbox.duitku.com
 DUITKU_API_VERSION=v2
 
 LP_NEWLP_UNIT_PRICE=99000
+LP_NEWLP_SHIPPING_PROMO_MAX=10000
+LP_NEWLP_SHIPPING_PROMO_MIN_QTY=2
 LP_NEWLP_WEIGHT_GRAM=300
 LP_NEWLP_LENGTH_CM=10
 LP_NEWLP_WIDTH_CM=10
@@ -384,7 +425,8 @@ var CHECKOUT_CONFIG = {
   unitPrice: 99000,
   productName: 'Produk Baru',
   landingPageSource: 'newlp',
-  freeShippingMax: 0
+  freeShippingMax: 10000,
+  freeShippingMinQuantity: 2
 };
 
 var EVERPRO_CONFIG = {
@@ -409,7 +451,12 @@ Jangan kirim `amount` dari client. Endpoint pembayaran harus:
 1. baca `lp_slug`, `quantity`, `rate_code`, alamat;
 2. ambil config server;
 3. hitung rates Everpro;
-4. hitung `amount`;
+4. hitung promo ongkir:
+   ```text
+   discount      = quantity >= min_quantity ? min(shipping_cost, max_discount) : 0
+   package_price = product_total - discount
+   amount        = package_price + shipping_cost
+   ```
 5. baru panggil Duitku.
 
 ### Langkah 5 — simpan snapshot order
@@ -491,6 +538,9 @@ transaksi agar amount, alamat, dan status tidak bisa diubah dari browser.
 
 - [ ] `LP_CONFIGS` sudah berisi LP baru.
 - [ ] Harga/berat/dimensi di client dan server sama.
+- [ ] Promo ongkir (min qty + max diskon) sama di client dan server.
+- [ ] `package_price = product_total - discount`; `shipment_price` tetap sama
+      dengan rate Everpro.
 - [ ] Secrets Everpro + Duitku sudah di-set.
 - [ ] `LandingPage_Config` tidak menimpa env dengan nilai sandbox (atau sudah
       diupdate ke production).
@@ -517,6 +567,8 @@ transaksi agar amount, alamat, dan status tidak bisa diubah dari browser.
 | `PickupTime is a required field` | `pickup_time` tidak dikirim | Kirim RFC3339 dari server |
 | `expected=string, got=number` | `pickup_time` dikirim Unix timestamp | Pakai `toISOString()` |
 | `Sign key tidak valid` | Nilai signed_key beda dengan get-rates | Samakan weight kg, shipment_price raw, package_price, dll. |
+| `Sign key tidak valid` setelah promo | `package_price` tidak sama dengan `item_price` get-rates | Get-rates ulang dengan `item_price = package_price` |
+| `Ongkir berubah saat promo diterapkan` | Harga rate berubah antara get-rates pertama dan kedua | Ulangi checkout; jangan buat order |
 | `GAGAL MEMBUAT RESI` | Cargo/vehicle untuk paket kecil | Filter cargo/vehicle |
 | `Nominal pembayaran tidak cocok` | Client amount beda dengan server | Hitung amount di server |
 | `Pembayaran belum berhasil` | Belum bayar / `resultCode != 00` | Cek Duitku |
@@ -530,9 +582,9 @@ transaksi agar amount, alamat, dan status tidak bisa diubah dari browser.
 Setiap function punya `FUNCTION_BUILD`. Ganti saat deploy agar log membuktikan
 versi yang berjalan.
 
-- `lp-everpro-rates`: `2026-10-21-server-config`
-- `lp-everpro-create-order`: `2026-10-21-hardened`
-- Client: `index.html` → `js/main.js?v=20261021-5`
+- `lp-everpro-rates`: `2026-10-21-promo`
+- `lp-everpro-create-order`: `2026-10-21-promo`
+- Client: `index.html` → `js/main.js?v=20261021-6`
 
 Saat mengubah kode, naikkan marker dan cache-bust. Jangan mengandalkan cache
 browser.
@@ -550,7 +602,7 @@ file `.txt` setiap kali function berubah.
 2. **Snapshot order di `lp_orders`.** Bind amount + alamat + rate_code ke order
    number.
 3. ~~**`lp-everpro-rates` server-side config.**~~ Selesai di repo: build
-   `2026-10-21-server-config` memakai `lp_slug` + `quantity` + `LP_CONFIGS`.
+   `2026-10-21-promo` memakai `lp_slug` + `quantity` + `LP_CONFIGS`.
    Pastikan sudah ter-deploy.
 4. ~~**Filter array `flattenRates`.**~~ Selesai di repo: build
    `2026-10-21-hardened` memfilter array response juga, bukan hanya object
@@ -584,7 +636,10 @@ Saat diminta mengerjakan LP baru atau mengubah checkout:
 - `signed_key` memakai nilai raw dari get-rates.
 - `pickup_time` dipilih server, format RFC3339, skip Minggu.
 - `shipment_type = PICKUP` untuk TinyHoney.
-- `freeShippingMax = 0` (promo teks tetap tampil).
+- Harga produk TinyHoney: **Rp99.000**.
+- Promo ongkir: **100% off, max Rp10.000, min 2 botol**.
+- Diskon promo dipotong dari `package_price`; `shipment_price` Everpro tetap
+  sama dengan rate kurir.
 - `cargo` dan `vehicle` tidak ditampilkan untuk TinyHoney.
 - `client_order_no = order_number` Duitku untuk idempotensi.
 - Callback Everpro tidak diperlukan untuk print label; admin generate AWB dari

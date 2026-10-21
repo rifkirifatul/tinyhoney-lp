@@ -37,14 +37,17 @@
   var CHECKOUT_CONFIG = {
     // Centralized Supabase Edge Function that creates the Duitku transaction.
     endpoint: 'https://bdvirbyivvoifdrvvjgb.supabase.co/functions/v1/duitku-lp-order',
-    unitPrice: 129000,               // Promo price per bottle (Rp)
+    unitPrice: 99000,                // Promo price per bottle (Rp)
     productName: '1 Botol TinyHoney',
     landingPageSource: 'tinyhoney',
     notes: 'Pesanan via LP Tiny Honey',
     // Keep these values in sync with LP_TINYHONEY_* secrets in Supabase.
-    // Promo free shipping sedang tidak aktif. Teks promosi di halaman tetap
-    // ditampilkan, tetapi potongan ongkir tidak diterapkan.
-    freeShippingMax: 0
+    // Promo ongkir: 100% discount, capped at Rp10.000, minimum 2 bottles.
+    // The buyer sees this as a shipping discount, but the server applies the
+    // discount to the product value so Everpro's shipment_price stays equal to
+    // the rate returned by the courier.
+    freeShippingMax: 10000,
+    freeShippingMinQuantity: 2
   };
 
   // --- Everpro shipping integration ---
@@ -221,27 +224,34 @@
   }
 
   /**
-   * Promo discount for shipping (FREE ONGKIR max. Rp30.000).
+   * Promo discount for shipping: 100% off, capped at Rp10.000, and only
+   * active when the buyer orders at least 2 bottles.
    * Pure function.
    * @param {number|string} shippingCost
+   * @param {number|string} quantity
    * @returns {number}
    */
-  function computeShippingDiscount(shippingCost) {
+  function computeShippingDiscount(shippingCost, quantity) {
     var cost = Number(shippingCost) || 0;
     if (cost < 0) { cost = 0; }
-    return Math.min(cost, CHECKOUT_CONFIG.freeShippingMax || 0);
+    var qty = parseInt(quantity, 10) || 1;
+    var minQty = CHECKOUT_CONFIG.freeShippingMinQuantity || 1;
+    if (qty < minQty) { return 0; }
+    var maxDiscount = CHECKOUT_CONFIG.freeShippingMax || 0;
+    return Math.min(cost, maxDiscount);
   }
 
   /**
    * Shipping amount actually paid by the buyer after the promo discount.
    * Pure function.
    * @param {number|string} shippingCost
+   * @param {number|string} quantity
    * @returns {number}
    */
-  function computeShippingPaid(shippingCost) {
+  function computeShippingPaid(shippingCost, quantity) {
     var cost = Number(shippingCost) || 0;
     if (cost < 0) { cost = 0; }
-    return cost - computeShippingDiscount(cost);
+    return cost - computeShippingDiscount(cost, quantity);
   }
 
   /**
@@ -350,7 +360,7 @@
   }
 
   /**
-   * Formats a number as Rupiah, e.g. 129000 -> "Rp129.000".
+   * Formats a number as Rupiah, e.g. 99000 -> "Rp99.000".
    * Pure function — no side effects.
    * @param {number} amount
    * @returns {string}
@@ -371,12 +381,10 @@
     var shippingCost = (values.shipping_cost === undefined || values.shipping_cost === null)
       ? 0
       : Number(values.shipping_cost) || 0;
-    var shippingDiscount = (values.shipping_discount === undefined || values.shipping_discount === null)
-      ? 0
-      : Number(values.shipping_discount) || 0;
-    var shippingPaid = (values.shipping_paid === undefined || values.shipping_paid === null)
-      ? Math.max(0, shippingCost - shippingDiscount)
-      : Number(values.shipping_paid) || 0;
+    // Recompute the promo from quantity + shipping cost so a stale
+    // shipping_discount/shipping_paid value cannot change the amount.
+    var shippingDiscount = computeShippingDiscount(shippingCost, qty);
+    var shippingPaid = Math.max(0, shippingCost - shippingDiscount);
 
     var payload = {
       product_name: CHECKOUT_CONFIG.productName,
@@ -520,12 +528,8 @@
             var qty = parseInt(values.quantity, 10) || 1;
             var subtotal = computeAmount(qty, CHECKOUT_CONFIG.unitPrice);
             var shippingCost = Number(values.shipping_cost) || 0;
-            var shippingDiscount = (values.shipping_discount === undefined || values.shipping_discount === null)
-              ? 0
-              : Number(values.shipping_discount) || 0;
-            var shippingPaid = (values.shipping_paid === undefined || values.shipping_paid === null)
-              ? Math.max(0, shippingCost - shippingDiscount)
-              : Number(values.shipping_paid) || 0;
+            var shippingDiscount = computeShippingDiscount(shippingCost, qty);
+            var shippingPaid = computeShippingPaid(shippingCost, qty);
             window.sessionStorage.setItem('tinyhoney_checkout', JSON.stringify({
               customer_name: values.customer_name,
               phone: values.phone,
@@ -1068,11 +1072,13 @@
     }
 
     function collectValues() {
+      var qty = qtyInput ? qtyInput.value : 1;
+      var shippingCost = state.selectedRate ? state.selectedRate.price : 0;
       return {
         customer_name: nameInput ? nameInput.value.trim() : '',
         phone: phoneInput ? phoneInput.value.trim() : '',
         address: addressInput ? addressInput.value.trim() : '',
-        quantity: qtyInput ? qtyInput.value : 1,
+        quantity: qty,
         province_id: provinceSelect ? provinceSelect.value : '',
         province_name: selectedName(provinceSelect),
         city_id: citySelect ? citySelect.value : '',
@@ -1083,9 +1089,9 @@
         sub_district_name: selectedName(subdistrictSelect),
         postal_code: postalInput ? postalInput.value : '',
         payment_method: paymentSelect ? paymentSelect.value : '',
-        shipping_cost: state.selectedRate ? state.selectedRate.price : 0,
-        shipping_discount: computeShippingDiscount(state.selectedRate ? state.selectedRate.price : 0),
-        shipping_paid: computeShippingPaid(state.selectedRate ? state.selectedRate.price : 0),
+        shipping_cost: shippingCost,
+        shipping_discount: computeShippingDiscount(shippingCost, qty),
+        shipping_paid: computeShippingPaid(shippingCost, qty),
         courier_code: state.selectedRate ? state.selectedRate.logistic_code : '',
         courier_name: state.selectedRate ? state.selectedRate.logistic_name : '',
         courier_service: state.selectedRate ? (state.selectedRate.rate_name || state.selectedRate.rate_code) : '',
@@ -1188,8 +1194,8 @@
       var qty = parseInt(values.quantity, 10) || 1;
       var subtotal = computeAmount(qty, CHECKOUT_CONFIG.unitPrice);
       var shippingCost = state.selectedRate ? state.selectedRate.price : 0;
-      var discount = computeShippingDiscount(shippingCost);
-      var shippingPaid = computeShippingPaid(shippingCost);
+      var discount = computeShippingDiscount(shippingCost, qty);
+      var shippingPaid = computeShippingPaid(shippingCost, qty);
       if (summaryQuantity) { summaryQuantity.textContent = qty + ' botol'; }
       if (summarySubtotal) { summarySubtotal.textContent = formatRupiah(subtotal); }
       if (summaryShipping) {

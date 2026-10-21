@@ -10,8 +10,9 @@ Duitku payments and Everpro shipping.
 
 1. The browser is untrusted. Never use client-supplied prices, weights,
    dimensions, shipping costs, or payment amounts as the source of truth.
-2. Product price, weight, dimensions, origin, shipper, free-shipping cap, and
-   allowed courier groups live in the Edge Function (`LP_CONFIGS` / env).
+2. Product price, weight, dimensions, origin, shipper, shipping promo cap and
+   minimum quantity, and allowed courier groups live in the Edge Function
+   (`LP_CONFIGS` / env).
 3. `lp-everpro-create-order` must keep verifying:
    - Duitku `transactionStatus` with `resultCode = 00`;
    - `merchantOrderId` and `reference`;
@@ -20,12 +21,16 @@ Duitku payments and Everpro shipping.
    - `client_order_no = order_number` for idempotency.
 4. Never put Everpro/Duitku secrets in `js/main.js`, HTML, or any public file.
 5. Keep client and server values in sync: `unitPrice`, `weightPerItemGram`,
-   dimensions, `freeShippingMax`, and `shipmentType`.
+   dimensions, `freeShippingMax`, `freeShippingMinQuantity`, and
+   `shipmentType`.
 6. TinyHoney only offers `regular`, `express`, `same_day`, and `instant`.
    Cargo/vehicle services are blocked because they often fail AWB generation.
-7. After editing `js/main.js`, bump the cache-bust in `index.html`
+7. The shipping promo is 100% off, capped at Rp10.000, minimum 2 bottles. Apply
+   the discount to Everpro `package_price`, never to `shipment_price`. Re-fetch
+   rates with the discounted `item_price` so `signed_key` stays valid.
+8. After editing `js/main.js`, bump the cache-bust in `index.html`
    (`js/main.js?v=...`). After editing an Edge Function, bump `FUNCTION_BUILD`.
-8. `duitku-lp-order` currently trusts the client `amount`. This is a known gap.
+9. `duitku-lp-order` currently trusts the client `amount`. This is a known gap.
    The shipment gatekeeper rejects mismatches, but the payment page amount must
    be moved server-side before production. See §5 of the integration guide.
 
@@ -33,8 +38,8 @@ Duitku payments and Everpro shipping.
 
 Follow §6 of `docs/LP-INTEGRATION-GUIDE.md`. In short:
 
-1. Add one `LP_CONFIGS` entry in `lp-everpro-create-order` (and, once hardened,
-   `lp-everpro-rates`).
+1. Add one `LP_CONFIGS` entry in both `lp-everpro-rates` and
+   `lp-everpro-create-order`.
 2. Add `LP_<SLUG>_*` env vars and Everpro/Duitku secrets.
 3. Add the client config with `landingPageSource` matching the config key.
 4. Compute the Duitku amount server-side.
