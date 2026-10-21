@@ -295,6 +295,9 @@
     var weight = qty * EVERPRO_CONFIG.weightPerItemGram;
     return {
       lp_slug: CHECKOUT_CONFIG.landingPageSource,
+      // The server resolves price/weight/dimensions from its own LP config.
+      // Keeping quantity here avoids trusting client-side package values.
+      quantity: qty,
       origin_postal_code: EVERPRO_CONFIG.originPostalCode,
       origin_sub_district_name: EVERPRO_CONFIG.originSubDistrictName,
       destination_postal_code: values.postal_code,

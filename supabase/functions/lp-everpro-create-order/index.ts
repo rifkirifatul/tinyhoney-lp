@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-no-cargo";
+const FUNCTION_BUILD = "2026-10-21-hardened";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -175,16 +175,26 @@ function normalizeRatePrice(price: unknown): number {
   return Math.round(value);
 }
 
+// TinyHoney is a small parcel. Cargo/vehicle services often reject AWB
+// generation for this weight, so the server refuses to select them too.
+const ALLOWED_RATE_GROUPS = ["regular", "express", "same_day", "instant"];
+
+function isAllowedRate(rate: any): boolean {
+  const group = String(rate?.group || rate?.rate_group || "").trim().toLowerCase();
+  if (group) return ALLOWED_RATE_GROUPS.includes(group);
+  // Flat Everpro arrays have no group. Reject obvious cargo/vehicle names so
+  // an array response cannot bypass the group filter.
+  const logistic = String(rate?.logistic_name || "").trim().toLowerCase();
+  return !logistic.includes("cargo") && !logistic.includes("vehicle");
+}
+
 function flattenRates(data: any): any[] {
   if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.rates)) return data.rates;
+  if (Array.isArray(data)) return data.filter(isAllowedRate);
+  if (Array.isArray(data.rates)) return data.rates.filter(isAllowedRate);
 
-  // TinyHoney is a small parcel. Cargo/vehicle services often reject AWB
-  // generation for this weight, so the server refuses to select them too.
-  const groups = ["regular", "express", "same_day", "instant"];
   const rows: any[] = [];
-  for (const group of groups) {
+  for (const group of ALLOWED_RATE_GROUPS) {
     if (Array.isArray(data[group])) rows.push(...data[group]);
   }
   return rows;

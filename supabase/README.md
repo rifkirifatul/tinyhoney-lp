@@ -1,12 +1,24 @@
 # TinyHoney LP — Supabase Edge Functions
 
+> **Read the reusable integration guide first:**
+> [`docs/LP-INTEGRATION-GUIDE.md`](../docs/LP-INTEGRATION-GUIDE.md). It contains
+> the architecture, endpoint contracts, security invariants, and the checklist
+> for onboarding the next landing page.
+
 > **Important:** Deploy both functions before publishing the updated LP. The old
 > `lp-everpro-create-order` did not verify the Duitku payment. Overwrite it with
 > the code in this folder first, then publish the static site.
 
+> **Known gap before production:** `duitku-lp-order` still accepts the
+> `amount` sent by the browser. A manipulated amount can create a cheap Duitku
+> payment page, but `lp-everpro-create-order` rejects the shipment because the
+> paid amount does not match the server total. The payment amount must be
+> computed server-side (or the LP must use a dedicated payment function) before
+> go-live. See §5 of the integration guide.
+
 These functions are isolated from the main webstore functions:
 
-- `lp-everpro-rates` — province/city/district/subdistrict lookup still uses the existing `everpro-*` functions; rates now use this LP-specific function.
+- `lp-everpro-rates` — province/city/district/subdistrict lookup still uses the existing `everpro-*` functions; rates now use this LP-specific function. For a known `lp_slug`, it resolves weight, dimensions, item price, origin, and shipment type from `LP_CONFIGS`; the browser only sends `quantity`, destination, and courier filters.
 - `lp-everpro-create-order` — verifies the Duitku payment, recalculates the rate, and creates the Everpro shipment order.
 
 ## Security flow
@@ -49,12 +61,22 @@ TinyHoney warehouse. This value must match in two places:
 To switch to `DROP`, change both values to `DROP`, redeploy the function, and
 publish the LP. Rates and the paid amount must be recalculated after switching.
 
+### Server-side package config
+
+For a known `lp_slug`, `lp-everpro-rates` ignores the client's `weight`,
+`item_price`, `width`, `height`, `length`, `origin_postal_code`,
+`origin_sub_district_name`, and `shipment_type`. It computes them from
+`LP_CONFIGS` so a modified browser cannot request a fake cheap rate.
+
+Keep `LP_CONFIGS` in `lp-everpro-rates` and `lp-everpro-create-order` in sync.
+When adding a new LP, add the same product values to both functions.
+
 ### Courier services
 
 The LP only offers `regular`, `express`, `same_day`, and `instant` rates. Cargo
 and vehicle services are excluded because they often reject AWB generation for
 small parcels such as TinyHoney. The create-order function applies the same
-filter server-side.
+filter server-side, including to flat array responses from Everpro.
 
 ### Everpro signed_key
 
@@ -135,6 +157,12 @@ The promotional copy can stay on the landing page, but no shipping discount is a
 Buyers pay the shipping cost added by the server. If the client and server caps differ, `lp-everpro-create-order` rejects the order with `Nominal pembayaran tidak cocok` to prevent underpayment.
 
 ## Deploy
+
+Current build markers:
+
+- `lp-everpro-rates`: `2026-10-21-server-config`
+- `lp-everpro-create-order`: `2026-10-21-hardened`
+- Client: `js/main.js?v=20261021-5`
 
 From the repository root:
 

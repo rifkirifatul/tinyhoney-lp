@@ -2,12 +2,55 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-kg";
+const FUNCTION_BUILD = "2026-10-21-server-config";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name, *",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS, PUT, DELETE, PATCH",
+};
+
+function envInt(name: string, fallback: number): number {
+  const parsed = parseInt(Deno.env.get(name) || "", 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+/**
+ * Server-side source of truth for each LP. The browser may only send the LP
+ * slug, quantity, destination, and selected courier. Weight, dimensions, item
+ * price, origin, and shipment type are resolved here so a manipulated client
+ * cannot request a fake cheap rate.
+ *
+ * Keep this in sync with LP_CONFIGS in lp-everpro-create-order.
+ */
+const LP_CONFIGS: Record<string, {
+  unitPrice: number;
+  weightPerItemGram: number;
+  lengthCm: number;
+  widthCm: number;
+  heightCm: number;
+  packageTypeId: number;
+  shipmentType: string;
+  originPostalCode: string;
+  originSubDistrictName: string;
+}> = {
+  tinyhoney: {
+    unitPrice: envInt("LP_TINYHONEY_UNIT_PRICE", 129000),
+    weightPerItemGram: envInt("LP_TINYHONEY_WEIGHT_GRAM", 175),
+    lengthCm: envInt("LP_TINYHONEY_LENGTH_CM", 6),
+    widthCm: envInt("LP_TINYHONEY_WIDTH_CM", 6),
+    heightCm: envInt("LP_TINYHONEY_HEIGHT_CM", 11),
+    packageTypeId: 1,
+    shipmentType: "PICKUP",
+    originPostalCode:
+      Deno.env.get("LP_TINYHONEY_ORIGIN_POSTAL_CODE") ||
+      Deno.env.get("SHIPPER_POSTAL_CODE") ||
+      "40286",
+    originSubDistrictName:
+      Deno.env.get("LP_TINYHONEY_ORIGIN_SUB_DISTRICT_NAME") ||
+      Deno.env.get("SHIPPER_SUB_DISTRICT_NAME") ||
+      "Manjahlega",
+  },
 };
 
 function asPositiveInt(value: unknown, fallback: number): number {
@@ -42,6 +85,7 @@ serve(async (req) => {
 
     const {
       lp_slug = "tinyhoney",
+      quantity,
       origin_postal_code,
       origin_sub_district_name,
       destination_postal_code,
@@ -107,31 +151,68 @@ serve(async (req) => {
       throw new Error(`Everpro authentication failed: ${JSON.stringify(authJson)}`);
     }
 
-    // 3. Resolve origin/destination.
-    const originPostal = String(origin_postal_code || Deno.env.get("SHIPPER_POSTAL_CODE") || "").trim();
+    // 3. Resolve server-side package dimensions and origin. For a known LP,
+    // ignore weight/dimensions/origin/item_price from the browser.
+    const lpConfig = LP_CONFIGS[resolvedSlug];
+    const requestedQuantity = parseInt(String(quantity ?? ""), 10);
+
+    if (
+      lpConfig &&
+      (!Number.isFinite(requestedQuantity) || requestedQuantity < 1 || requestedQuantity > 99)
+    ) {
+      throw new Error("quantity (1-99) wajib diisi untuk LP ini.");
+    }
+
+    const weightGram = lpConfig && Number.isFinite(requestedQuantity)
+      ? requestedQuantity * lpConfig.weightPerItemGram
+      : weight;
+    const itemPrice = lpConfig && Number.isFinite(requestedQuantity)
+      ? requestedQuantity * lpConfig.unitPrice
+      : asPositiveInt(item_price, 150000);
+    const widthCm = lpConfig ? lpConfig.widthCm : asPositiveInt(width, 10);
+    const heightCm = lpConfig ? lpConfig.heightCm : asPositiveInt(height, 10);
+    const lengthCm = lpConfig ? lpConfig.lengthCm : asPositiveInt(length, 10);
+    const packageTypeId = lpConfig
+      ? lpConfig.packageTypeId
+      : asPositiveInt(package_type_id, 1);
+    const shipmentTypeValue = lpConfig
+      ? lpConfig.shipmentType
+      : String(shipment_type || "PICKUP").toUpperCase();
+    const originPostal = lpConfig
+      ? lpConfig.originPostalCode
+      : String(origin_postal_code || Deno.env.get("SHIPPER_POSTAL_CODE") || "").trim();
+    const originSubDistrict = lpConfig
+      ? lpConfig.originSubDistrictName
+      : String(origin_sub_district_name || "").trim();
     const destinationPostal = String(destination_postal_code || "").trim();
 
     if (!originPostal || !destinationPostal) {
       throw new Error("origin_postal_code and destination_postal_code are required for rate calculation.");
     }
 
+    if (lpConfig) {
+      console.log(
+        `[LP-EVERPRO-RATES] server config ${resolvedSlug}: qty=${requestedQuantity}, weight=${weightGram}g, item_price=${itemPrice}`,
+      );
+    }
+
     // Everpro V2 rates expects snake_case and weight in kilograms.
     const ratesPayload: Record<string, unknown> = {
       origin_postal_code: originPostal,
       destination_postal_code: destinationPostal,
-      weight: asWeightKg(weight),
-      item_price: asPositiveInt(item_price, 150000),
+      weight: asWeightKg(weightGram),
+      item_price: itemPrice,
       is_cod: Boolean(is_cod),
       is_use_insurance: Boolean(is_use_insurance),
-      package_type_id: asPositiveInt(package_type_id, 1),
-      shipment_type: String(shipment_type || "PICKUP").toUpperCase(),
-      width: asPositiveInt(width, 10),
-      height: asPositiveInt(height, 10),
-      length: asPositiveInt(length, 10),
+      package_type_id: packageTypeId,
+      shipment_type: shipmentTypeValue,
+      width: widthCm,
+      height: heightCm,
+      length: lengthCm,
     };
 
-    if (origin_sub_district_name) {
-      ratesPayload.origin_sub_district_name = String(origin_sub_district_name).trim();
+    if (originSubDistrict) {
+      ratesPayload.origin_sub_district_name = originSubDistrict;
     }
     if (destination_sub_district_name) {
       ratesPayload.destination_sub_district_name = String(destination_sub_district_name).trim();
