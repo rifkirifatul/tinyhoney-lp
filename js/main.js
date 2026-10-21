@@ -78,8 +78,8 @@
     // Couriers pick up the parcel at the TinyHoney warehouse.
     shipmentType: 'PICKUP',
 
-    // Everpro returns rate prices in cents (sen); convert to Rupiah.
-    ratePriceDivisor: 100,
+    // Everpro returns rate prices in Rupiah.
+    ratePriceDivisor: 1,
 
     // Ignore non-Indonesian sample rows if Everpro returns them.
     excludedProvinceNames: ['Zhambyl 905']
@@ -209,7 +209,7 @@
   }
 
   /**
-   * Everpro returns rates in cents; normalize to Rupiah.
+   * Everpro returns rates in Rupiah; keep the value as-is.
    * Pure function.
    * @param {number|string} price
    * @returns {number}
@@ -1158,8 +1158,11 @@
           var meta = document.createElement('span');
           meta.className = 'shipping-option__meta';
           var eta = formatShippingEta(rate);
+          var currentValues = collectValues();
+          var grams = (parseInt(currentValues.quantity, 10) || 1) *
+            EVERPRO_CONFIG.weightPerItemGram;
           meta.textContent = (eta ? 'Estimasi ' + eta : 'Estimasi menyusul') +
-            (rate.weight ? ' • ' + rate.weight + ' gram' : '');
+            (grams ? ' • ' + grams + ' gram' : '');
           body.appendChild(name);
           body.appendChild(meta);
 

@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
+// Visible marker so the deployed logs prove which build is running.
+const FUNCTION_BUILD = "2026-10-21-kg";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-application-name, *",
@@ -12,16 +15,19 @@ function asPositiveInt(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function asWeightGram(value: unknown, fallback = 1000): number {
+// The LP sends weight in grams; Everpro expects kilograms.
+function asWeightKg(value: unknown, fallbackGram = 1000): number {
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.max(1, Math.round(parsed));
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallbackGram / 1000;
+  return Math.max(0.001, parsed / 1000);
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  console.log(`[LP-EVERPRO-RATES] build ${FUNCTION_BUILD}`);
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
@@ -109,11 +115,11 @@ serve(async (req) => {
       throw new Error("origin_postal_code and destination_postal_code are required for rate calculation.");
     }
 
-    // Everpro V2 rates expects snake_case and weight in grams.
+    // Everpro V2 rates expects snake_case and weight in kilograms.
     const ratesPayload: Record<string, unknown> = {
       origin_postal_code: originPostal,
       destination_postal_code: destinationPostal,
-      weight: asWeightGram(weight),
+      weight: asWeightKg(weight),
       item_price: asPositiveInt(item_price, 150000),
       is_cod: Boolean(is_cod),
       is_use_insurance: Boolean(is_use_insurance),

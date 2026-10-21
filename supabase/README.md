@@ -51,18 +51,19 @@ publish the LP. Rates and the paid amount must be recalculated after switching.
 
 ### Everpro signed_key
 
-Everpro validates `signed_key` against the raw values used by get-rates. The
-create-order payload must therefore reuse the same raw values:
+Everpro validates `signed_key` against the values used by get-rates. The
+create-order payload must therefore reuse the same values:
 
-- `weight` in grams (the same number sent to get-rates), not kilograms;
-- `shipment_price` from the raw rates response (`price`, in cents), not the
-  normalized Rupiah value shown to the buyer;
+- `weight` in kilograms in both get-rates and create-order. The LP sends grams,
+  so the functions convert with `weightGram / 1000`;
+- `shipment_price` equals the raw rates response `price`, which is already in
+  Rupiah;
 - `cashback`, `min_duration`, `max_duration`, `is_flat_rate`, and
   `insurance_price` from the selected rates response;
 - `package_price` equal to the get-rates `item_price`.
 
-Duitku still uses the normalized Rupiah amount for payment verification. Do not
-normalize `weight` or `shipment_price` before sending them to Everpro.
+Do not divide the rates `price` by 100: it is Rupiah, not cents. Duitku uses the
+same Rupiah amount for payment verification.
 
 If payment verification or Everpro creation fails, the buyer is still redirected to WhatsApp with a note that the shipment will be created manually by the admin. No unpaid order can be created.
 

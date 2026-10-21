@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 import md5 from "https://esm.sh/blueimp-md5@2.19.0";
 
 // Visible marker so the deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-signed-key";
+const FUNCTION_BUILD = "2026-10-21-kg-rupiah";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -171,7 +171,8 @@ async function resolvePickupTime(
 function normalizeRatePrice(price: unknown): number {
   const value = Number(price);
   if (!Number.isFinite(value) || value < 0) return 0;
-  return Math.round(value / 100);
+  // Everpro returns rate prices in Rupiah, not cents.
+  return Math.round(value);
 }
 
 function flattenRates(data: any): any[] {
@@ -633,7 +634,8 @@ serve(async (req) => {
       origin_sub_district_name: shipper.subDistrictName,
       destination_postal_code: receiver.postalCode,
       destination_sub_district_name: receiver.subDistrictName,
-      weight: weightGram,
+      // Everpro rates expect kilograms.
+      weight: weightGram / 1000,
       item_price: productTotal,
       is_cod: false,
       is_use_insurance: false,
@@ -683,9 +685,9 @@ serve(async (req) => {
 
     // 6. Create the Everpro shipment order.
     const orderPayload: Record<string, unknown> = {
-      // These values must match the raw values used by get-rates. Everpro
-      // validates signed_key against them, so do not normalize weight or
-      // shipment_price here. The LP uses normalized Rupiah only for Duitku.
+      // These values must match the get-rates request/response exactly:
+      // weight in kilograms and the raw Rupiah price. Everpro validates
+      // signed_key against them.
       cashback: Number(selectedRate?.cashback) || 0,
       client_order_no: orderNumber,
       cod_price: 0,
@@ -720,7 +722,7 @@ serve(async (req) => {
       shipper_sub_district_name: shipper.subDistrictName,
       signed_key: String(selectedRate.signed_key),
       surcharge: Number(selectedRate?.surcharge) || 0,
-      weight: weightGram,
+      weight: weightGram / 1000,
       width: config.widthCm,
     };
 
