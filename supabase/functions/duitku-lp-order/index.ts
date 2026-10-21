@@ -329,6 +329,12 @@ async function readCallbackPayload(req: Request): Promise<Record<string, string>
 async function handleDuitkuCallback(req: Request): Promise<Response> {
   console.log(`[DUITKU-LP-ORDER] callback build ${FUNCTION_BUILD}`);
 
+  // Duitku sends the real callback as POST form-urlencoded. A GET/HEAD is
+  // only a reachability probe; answer 200 so the URL is considered healthy.
+  if (req.method !== "POST") {
+    return new Response("OK", { status: 200 });
+  }
+
   try {
     const data = await readCallbackPayload(req);
     console.log("[DUITKU-LP-ORDER] callback payload:", JSON.stringify(data));
