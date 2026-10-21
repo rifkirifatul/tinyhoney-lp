@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-server-amount-env";
+const FUNCTION_BUILD = "2026-10-21-inquiry-url-log";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -214,11 +214,48 @@ function getDuitkuConfig() {
 }
 
 function duitkuInquiryUrl(baseUrl: string): string {
-  const base = String(baseUrl || "").replace(/\/$/, "");
-  if (base.endsWith("/v2/inquiry")) return base;
-  if (base.endsWith("/webapi/api")) return `${base}/merchant/v2/inquiry`;
-  if (base.endsWith("/webapi")) return `${base}/api/merchant/v2/inquiry`;
-  return `${base}/webapi/api/merchant/v2/inquiry`;
+  const raw = String(baseUrl || "").trim();
+  if (!raw) return "";
+
+  // Selalu pakai host + path v2 yang canonical. Ini mencegah URL dobel
+  // kalau DUITKU_API_URL ternyata berisi full path (mis. transactionStatus
+  // atau /v1/inquiry), yang bisa membuat Duitku membalas 404/504.
+  try {
+    const url = new URL(raw);
+    const hostname = url.hostname.toLowerCase();
+    let host = url.host.toLowerCase();
+    if (hostname === "api-sandbox.duitku.com" || hostname === "sandbox.duitku.com") {
+      host = "sandbox.duitku.com";
+    } else if (
+      hostname === "api-prod.duitku.com" || hostname === "passport.duitku.com"
+    ) {
+      host = "passport.duitku.com";
+    }
+    return `${url.protocol}//${host}/webapi/api/merchant/v2/inquiry`;
+  } catch {
+    return `${raw.replace(/\/+$/, "")}/webapi/api/merchant/v2/inquiry`;
+  }
+}
+
+async function fetchDuitkuInquiry(
+  url: string,
+  payload: unknown,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    return await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /**
@@ -463,6 +500,7 @@ serve(async (req) => {
 
     // Reuse lp-everpro-rates so the price and courier list come from the same
     // server-side configuration as the shipment gatekeeper.
+    const ratesStartedAt = Date.now();
     const ratesResponse = await fetch(
       `${supabaseUrl}/functions/v1/lp-everpro-rates`,
       {
@@ -489,6 +527,12 @@ serve(async (req) => {
     } catch {
       ratesJson = { error: ratesText };
     }
+
+    console.log(
+      `[DUITKU-LP-ORDER] rates HTTP ${ratesResponse.status} in ${
+        Date.now() - ratesStartedAt
+      }ms`,
+    );
 
     if (!ratesResponse.ok || ratesJson?.success === false) {
       throw new HttpError(
@@ -567,6 +611,9 @@ serve(async (req) => {
     // function/endpoint baru.
     const callbackUrl = Deno.env.get("DUITKU_CALLBACK_URL") ||
       `${supabaseUrl}/functions/v1/duitku-lp-order?action=callback`;
+    console.log(
+      `[DUITKU-LP-ORDER] callback URL=${callbackUrl} return URL=${returnUrl}`,
+    );
     const email = Deno.env.get("DUITKU_DEFAULT_EMAIL") || "admin@tinyhoney.id";
     const phone = receiver.phone.replace(/[^0-9+]/g, "").slice(0, 50);
     const customerName = receiver.name.slice(0, 20) || "TinyHoney Buyer";
@@ -628,12 +675,30 @@ serve(async (req) => {
     console.log(
       `[DUITKU-LP-ORDER] Creating ${orderNumber} amount=${amount} method=${paymentMethod} rate=${selectedRate?.rate_code || rateCode}`,
     );
+    console.log(
+      `[DUITKU-LP-ORDER] inquiry URL=${duitku.inquiryUrl} env=${
+        duitku.isProduction ? "production" : "sandbox"
+      }`,
+    );
 
-    const duitkuResponse = await fetch(duitku.inquiryUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+    const inquiryStartedAt = Date.now();
+    let duitkuResponse: Response;
+    try {
+      duitkuResponse = await fetchDuitkuInquiry(duitku.inquiryUrl, payload);
+    } catch (error) {
+      if ((error as Error).name === "AbortError") {
+        throw new HttpError(
+          504,
+          "Duitku tidak merespons dalam 20 detik. Coba lagi beberapa saat.",
+        );
+      }
+      throw error;
+    }
+    console.log(
+      `[DUITKU-LP-ORDER] inquiry HTTP ${duitkuResponse.status} in ${
+        Date.now() - inquiryStartedAt
+      }ms`,
+    );
 
     const duitkuText = await duitkuResponse.text();
     let duitkuJson: any;
@@ -649,12 +714,14 @@ serve(async (req) => {
       !duitkuJson?.paymentUrl
     ) {
       console.error("[DUITKU-LP-ORDER] Duitku inquiry failed:", duitkuText);
-      throw new HttpError(
-        502,
-        `Duitku gagal membuat transaksi: ${
-          duitkuJson?.statusMessage || duitkuText || "inquiry error"
-        }`,
-      );
+      const detail = duitkuJson?.statusMessage ||
+        duitkuJson?.Message ||
+        duitkuText ||
+        "inquiry error";
+      const message = duitkuResponse.status >= 500
+        ? `Duitku sedang tidak dapat memproses pembayaran (HTTP ${duitkuResponse.status}). Coba lagi atau pilih metode pembayaran lain.`
+        : `Duitku gagal membuat transaksi (HTTP ${duitkuResponse.status}): ${detail}`;
+      throw new HttpError(502, message);
     }
 
     // Store a snapshot when the table exists. This is best-effort: a missing

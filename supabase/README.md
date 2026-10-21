@@ -207,7 +207,7 @@ Current build markers:
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-21-server-amount-env`
+- `duitku-lp-order`: `2026-10-21-inquiry-url-log`
 - Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
 
 From the repository root:
@@ -234,6 +234,31 @@ If the functions are managed from the Supabase Dashboard, paste the contents of 
 > `js/main.js?v=20261021-10` at the same time. If the client and server prices
 > differ, `lp-everpro-create-order` rejects the order with
 > `Nominal pembayaran tidak cocok`. Existing open tabs may need a hard refresh.
+
+## Troubleshooting Duitku 504
+
+If the `duitku-lp-order` log shows a Duitku `504 Gateway Timeout`, the request
+reached Duitku but Duitku's upstream/channel did not answer in time. It is not
+a Supabase Edge Function timeout by itself. Check these in the function log:
+
+- `inquiry URL=... env=sandbox|production` — the function now logs the exact
+  canonical inquiry URL it calls. A sandbox merchant must use
+  `https://sandbox.duitku.com`; production uses
+  `https://passport.duitku.com`.
+- `rates HTTP ... in ...ms` and `inquiry HTTP ... in ...ms` — shows whether the
+  delay comes from Everpro rates or from Duitku.
+- `callback URL=...` — if `DUITKU_CALLBACK_URL` is set, it must be a public URL
+  such as `.../functions/v1/duitku-lp-order?action=callback`, or unset.
+- Match `DUITKU_MERCHANT_CODE` and `DUITKU_API_KEY` to the same environment
+  (sandbox vs production). A mismatched pair usually fails, and a channel
+  outage can surface as a 504.
+
+The function canonicalizes `DUITKU_API_URL` to
+`/webapi/api/merchant/v2/inquiry`, so a full old path in the secret no longer
+produces a doubled URL. It also aborts the Duitku request after 20 seconds and
+returns a friendlier `Duitku sedang tidak dapat memproses pembayaran` message.
+When a 504 persists, retry and try a different payment method (for example BCA
+VA instead of QRIS) to determine whether a specific channel is down.
 
 ## Callback endpoint
 
