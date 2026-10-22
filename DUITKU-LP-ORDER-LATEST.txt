@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-21-inquiry-url-log";
+const FUNCTION_BUILD = "2026-10-22-duitku-timeout-method";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -693,10 +693,10 @@ serve(async (req) => {
       duitkuResponse = await fetchDuitkuInquiry(duitku.inquiryUrl, payload);
     } catch (error) {
       if ((error as Error).name === "AbortError") {
-        throw new HttpError(
-          504,
-          "Duitku tidak merespons dalam 20 detik. Coba lagi beberapa saat.",
-        );
+        const timeoutMessage = paymentMethod === "SP"
+          ? "QRIS sedang tidak merespons. Coba pilih BCA Virtual Account atau metode pembayaran lain."
+          : `Duitku tidak merespons dalam 20 detik (metode ${paymentMethod}). Coba lagi atau pilih metode pembayaran lain.`;
+        throw new HttpError(504, timeoutMessage);
       }
       throw error;
     }

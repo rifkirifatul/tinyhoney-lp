@@ -207,7 +207,7 @@ Current build markers:
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-21-inquiry-url-log`
+- `duitku-lp-order`: `2026-10-22-duitku-timeout-method`
 - Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
 
 From the repository root:
@@ -246,7 +246,9 @@ a Supabase Edge Function timeout by itself. Check these in the function log:
   `https://sandbox.duitku.com`; production uses
   `https://passport.duitku.com`.
 - `rates HTTP ... in ...ms` and `inquiry HTTP ... in ...ms` — shows whether the
-  delay comes from Everpro rates or from Duitku.
+  delay comes from Everpro rates or from Duitku. The payment function deliberately
+  re-fetches rates so the amount is server-trusted; if `rates` is consistently
+  several seconds, a short-lived signed rate quote is the next optimization.
 - `callback URL=...` — if `DUITKU_CALLBACK_URL` is set, it must be a public URL
   such as `.../functions/v1/duitku-lp-order?action=callback`, or unset.
 - Match `DUITKU_MERCHANT_CODE` and `DUITKU_API_KEY` to the same environment
@@ -259,6 +261,22 @@ produces a doubled URL. It also aborts the Duitku request after 20 seconds and
 returns a friendlier `Duitku sedang tidak dapat memproses pembayaran` message.
 When a 504 persists, retry and try a different payment method (for example BCA
 VA instead of QRIS) to determine whether a specific channel is down.
+
+If the timeout message specifically mentions QRIS (`SP`), switch to BCA VA
+(`BC`). The helper script
+[`scripts/duitku-diagnose.ps1`](../scripts/duitku-diagnose.ps1) tests Duitku
+directly from your machine with your sandbox credentials, without exposing the
+API key:
+
+```powershell
+.\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode methods
+.\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode inquiry -PaymentMethod BC -Amount 198000
+.\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode inquiry -PaymentMethod SP -Amount 198000
+```
+
+If `methods` succeeds quickly but `SP` hangs, the QRIS channel is the problem.
+If `methods` itself hangs or returns an auth error, check the sandbox merchant
+code/API key and Duitku's sandbox status.
 
 ## Callback endpoint
 
