@@ -207,8 +207,8 @@ Current build markers:
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-22-qris-sandbox-guard`
-- Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261022-1`
+- `duitku-lp-order`: `2026-10-22-qris-active-channel`
+- Client: `js/main.js?v=20261022-1`, `css/styles.css?v=20261022-1`
 
 From the repository root:
 
@@ -231,7 +231,7 @@ If the functions are managed from the Supabase Dashboard, paste the contents of 
 > buyer opens checkout.
 >
 > **Price sync:** set `LP_TINYHONEY_UNIT_PRICE=99000` and publish the LP with
-> `js/main.js?v=20261021-10` at the same time. If the client and server prices
+> `js/main.js?v=20261022-1` at the same time. If the client and server prices
 > differ, `lp-everpro-create-order` rejects the order with
 > `Nominal pembayaran tidak cocok`. Existing open tabs may need a hard refresh.
 
@@ -249,6 +249,11 @@ a Supabase Edge Function timeout by itself. Check these in the function log:
   delay comes from Everpro rates or from Duitku. The payment function deliberately
   re-fetches rates so the amount is server-trusted; if `rates` is consistently
   several seconds, a short-lived signed rate quote is the next optimization.
+- `methods HTTP ...`, `QRIS channels=...`, and
+  `QRIS request=... resolved=...` — shows which QRIS channels Duitku reports as
+  active and which one the function selected. If the only channel is
+  `SP:...`, activate Nobu/Nusapay QRIS in the Duitku dashboard or test in
+  production.
 - `callback URL=...` — if `DUITKU_CALLBACK_URL` is set, it must be a public URL
   such as `.../functions/v1/duitku-lp-order?action=callback`, or unset.
 - Match `DUITKU_MERCHANT_CODE` and `DUITKU_API_KEY` to the same environment
@@ -262,10 +267,22 @@ returns a friendlier `Duitku sedang tidak dapat memproses pembayaran` message.
 When a 504 persists, retry and try a different payment method (for example BCA
 VA instead of QRIS) to determine whether a specific channel is down.
 
-The LP now hides QRIS while the sandbox `SP` channel is unreliable, and
-`duitku-lp-order` returns a fast `400` for `SP` in sandbox so a cached page
-does not wait 20 seconds. Re-enable the option after production or an active
-`NQ`/`SQ` channel is confirmed.
+The LP keeps a single **QRIS** option. When the buyer selects it,
+`duitku-lp-order` calls Duitku `getpaymentmethod` and resolves the active QRIS
+channel, preferring `NQ` (Nobu) then `SQ` (Nusapay) then `SP` (ShopeePay).
+This avoids hard-coding `SP` while the sandbox channel hangs. The active list
+is cached for five minutes. The log shows:
+
+```text
+methods HTTP 200 in ...ms
+QRIS request=QRIS resolved=NQ name=Nobu QRIS
+Creating ... method=NQ requested=QRIS ...
+```
+
+If no QRIS channel is active, the function returns a clear `400` asking the
+buyer to use BCA VA or activate QRIS in the Duitku dashboard. If the active
+channel still times out, QRIS is aborted after 12 seconds (other methods after
+20 seconds) and returns a QRIS-specific message instead of a generic 504.
 
 The helper script
 [`scripts/duitku-diagnose.ps1`](../scripts/duitku-diagnose.ps1) tests Duitku
@@ -281,7 +298,7 @@ API key:
 If `methods` succeeds quickly but `SP` hangs, the QRIS channel is the problem.
 If `methods` itself hangs or returns an auth error, check the sandbox merchant
 code/API key and Duitku's sandbox status. If `methods` lists `NQ` or `SQ`, test
-those QRIS channels before re-enabling the QRIS option:
+those channels directly; the LP will prefer them automatically when active:
 
 ```powershell
 .\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode inquiry -PaymentMethod NQ -Amount 198000

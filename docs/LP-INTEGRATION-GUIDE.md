@@ -147,7 +147,7 @@ Request yang disarankan:
 {
   "lp_slug": "tinyhoney",
   "quantity": 1,
-  "payment_method": "SP",
+  "payment_method": "QRIS",
   "rate_code": "UDRREG",
   "courier_name": "SAP Logistic",
   "courier_service": "Regular",
@@ -185,12 +185,19 @@ Response:
 ```
 
 **Status TinyHoney:** sudah memakai `duitku-lp-order` (build
-`2026-10-22-qris-sandbox-guard`). Function ini mengabaikan `amount`, `subtotal`,
+`2026-10-22-qris-active-channel`). Function ini mengabaikan `amount`, `subtotal`,
 `shipping_cost`, dan `shipping_discount` dari browser. Ia menghitung ulang
 harga produk, promo, dan ongkir lewat `lp-everpro-rates`, lalu membuat Duitku
 inquiry dengan `paymentAmount` server-side. Kode terbaru menggantikan versi
 lama yang masih mempercayai `amount` dari client; nama function tetap
 `duitku-lp-order`.
+
+Untuk QRIS, client cukup mengirim `payment_method: "QRIS"`. Server memanggil
+Duitku `getpaymentmethod` dan memilih channel QRIS yang aktif, dengan
+preferensi `NQ` (Nobu) → `SQ` (Nusapay) → `SP` (ShopeePay). Jangan hard-code
+`SP`; channel itu bisa hang di sandbox. Jika tidak ada channel QRIS aktif,
+server mengembalikan `400` dengan instruksi memakai BCA VA atau mengaktifkan
+QRIS di dashboard Duitku. Daftar channel di-cache lima menit.
 
 Callback Duitku ditangani oleh function yang sama di `?action=callback` dengan
 rumus `HMAC-SHA256(merchantCode + amount + merchantOrderId, apiKey)`. Tidak ada
@@ -335,7 +342,7 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
      ditolak karena amount tidak cocok, jadi **tidak bisa mendapat barang**
      dengan harga palsu. Tapi ini tetap masalah integritas pembayaran dan CS.
    - **Sudah diperbaiki untuk TinyHoney di repo:** kode `duitku-lp-order`
-     (build `2026-10-22-qris-sandbox-guard`) sekarang menghitung `paymentAmount`
+     (build `2026-10-22-qris-active-channel`) sekarang menghitung `paymentAmount`
      dari `LP_CONFIGS` + rates Everpro dan mengabaikan amount browser. Nama
      function tetap `duitku-lp-order`; tidak ada function pembayaran baru.
 
@@ -597,8 +604,8 @@ versi yang berjalan.
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-22-qris-sandbox-guard`
-- Client: `index.html` → `js/main.js?v=20261021-10`, `css/styles.css?v=20261022-1`
+- `duitku-lp-order`: `2026-10-22-qris-active-channel`
+- Client: `index.html` → `js/main.js?v=20261022-1`, `css/styles.css?v=20261022-1`
 
 Saat mengubah kode, naikkan marker dan cache-bust. Jangan mengandalkan cache
 browser.
@@ -613,7 +620,7 @@ berubah.
 ## 11. Hardening berikutnya (urutan prioritas)
 
 1. ~~**Server-side amount untuk Duitku.**~~ Selesai di repo: `duitku-lp-order`
-   build `2026-10-22-qris-sandbox-guard` memakai `LP_CONFIGS` + rates server-side.
+   build `2026-10-22-qris-active-channel` memakai `LP_CONFIGS` + rates server-side.
    Deploy dan test satu transaksi sandbox.
 2. **Snapshot order di `lp_orders`.** `duitku-lp-order` sudah menulis snapshot;
    langkah berikutnya adalah membuat `lp-everpro-create-order` membaca snapshot

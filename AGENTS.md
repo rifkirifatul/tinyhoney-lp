@@ -35,6 +35,9 @@ Duitku payments and Everpro shipping.
    rates. Do not create a second payment function with a different name. The
    same function handles Duitku callbacks at `?action=callback`; no separate
    callback function is required.
+10. The LP exposes one generic `QRIS` option. `duitku-lp-order` resolves the
+    active QRIS channel via `getpaymentmethod` (prefer `NQ`, then `SQ`, then
+    `SP`); never hard-code `SP`, which can hang in sandbox.
 
 ## Adding a new LP
 

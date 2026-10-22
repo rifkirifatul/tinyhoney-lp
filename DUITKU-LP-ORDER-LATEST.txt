@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-22-qris-sandbox-guard";
+const FUNCTION_BUILD = "2026-10-22-qris-active-channel";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -210,7 +210,23 @@ function getDuitkuConfig() {
     apiKey,
     isProduction,
     inquiryUrl: duitkuInquiryUrl(baseUrl),
+    methodsUrl: `${duitkuOrigin(baseUrl)}/webapi/api/merchant/paymentmethod/getpaymentmethod`,
   };
+}
+
+function duitkuOrigin(baseUrl: string): string {
+  const raw = String(baseUrl || "").trim();
+  if (!raw) return "https://sandbox.duitku.com";
+  try {
+    return new URL(raw).origin;
+  } catch {
+    const withProtocol = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+      return new URL(withProtocol).origin;
+    } catch {
+      return withProtocol.replace(/\/+$/, "");
+    }
+  }
 }
 
 function duitkuInquiryUrl(baseUrl: string): string {
@@ -240,9 +256,10 @@ function duitkuInquiryUrl(baseUrl: string): string {
 async function fetchDuitkuInquiry(
   url: string,
   payload: unknown,
+  timeoutMs = 20000,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(url, {
       method: "POST",
@@ -256,6 +273,128 @@ async function fetchDuitkuInquiry(
   } finally {
     clearTimeout(timer);
   }
+}
+
+type DuitkuPaymentMethod = { code: string; name: string };
+
+const paymentMethodsCache = new Map<
+  string,
+  { expiresAt: number; methods: DuitkuPaymentMethod[] }
+>();
+const PAYMENT_METHODS_CACHE_TTL_MS = 5 * 60_000;
+
+// Duitku getpaymentmethod expects `yyyy-MM-dd HH:mm:ss` in Jakarta time.
+function jakartaDateTime(): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(new Date());
+  const value = (type: string) =>
+    parts.find((part) => part.type === type)?.value || "00";
+  return `${value("year")}-${value("month")}-${value("day")} ${
+    value("hour")
+  }:${value("minute")}:${value("second")}`;
+}
+
+async function fetchDuitkuPaymentMethods(
+  duitku: ReturnType<typeof getDuitkuConfig>,
+  amount: number,
+): Promise<DuitkuPaymentMethod[]> {
+  const cacheKey = `${duitku.merchantCode}|${duitku.isProduction}|${amount}`;
+  const cached = paymentMethodsCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    console.log("[DUITKU-LP-ORDER] payment methods cache hit");
+    return cached.methods;
+  }
+
+  const datetime = jakartaDateTime();
+  const signature = await hmacSha256Hex(
+    `${duitku.merchantCode}${amount}${datetime}`,
+    duitku.apiKey,
+  );
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(duitku.methodsUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        merchantcode: duitku.merchantCode,
+        amount,
+        datetime,
+        signature,
+      }),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    console.log(
+      `[DUITKU-LP-ORDER] methods HTTP ${response.status} in ${
+        Date.now() - startedAt
+      }ms`,
+    );
+    if (!response.ok) {
+      throw new Error(`getpaymentmethod HTTP ${response.status}: ${text}`);
+    }
+
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`getpaymentmethod bukan JSON: ${text}`);
+    }
+    const list = Array.isArray(json)
+      ? json
+      : Array.isArray(json?.paymentFee)
+      ? json.paymentFee
+      : Array.isArray(json?.data)
+      ? json.data
+      : [];
+    const methods = list
+      .map((item: any) => ({
+        code: String(item?.paymentMethod || item?.payment_method || "")
+          .trim()
+          .toUpperCase(),
+        name: String(item?.paymentName || item?.payment_name || "").trim(),
+      }))
+      .filter((item: DuitkuPaymentMethod) => Boolean(item.code));
+
+    if (paymentMethodsCache.size > 50) paymentMethodsCache.clear();
+    paymentMethodsCache.set(cacheKey, {
+      expiresAt: Date.now() + PAYMENT_METHODS_CACHE_TTL_MS,
+      methods,
+    });
+    return methods;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function pickQrisMethod(
+  methods: DuitkuPaymentMethod[],
+): DuitkuPaymentMethod | null {
+  const qris = methods.filter((method) =>
+    QRIS_METHOD_CODES.has(method.code) || /qris/i.test(method.name)
+  );
+  if (qris.length === 0) return null;
+
+  // Prefer aggregator QRIS channels over ShopeePay-specific `SP`. This is
+  // what lets the LP keep a single "QRIS" option while the merchant's
+  // active channel changes.
+  for (const code of QRIS_PREFERENCE) {
+    const match = qris.find((method) => method.code === code);
+    if (match) return match;
+  }
+  return qris[0];
 }
 
 /**
@@ -283,14 +422,20 @@ function resolveReturnUrl(req: Request, body: any): string {
 
 function mapPaymentMethod(value: unknown): string {
   const code = String(value || "").trim().toUpperCase();
+  // LP memakai satu opsi "QRIS". Kode channel aktual (NQ/SQ/SP) dicari
+  // server-side lewat getpaymentmethod saat checkout.
+  if (code === "QRIS" || code === "QR") return "QRIS";
   // The LP labels these as Alfamart/Indomaret. Duitku v2 uses FT/IR.
   if (code === "AL") return "FT";
   if (code === "ID") return "IR";
   return code;
 }
 
+const QRIS_METHOD_CODES = new Set(["NQ", "SQ", "SP", "QR"]);
+const QRIS_PREFERENCE = ["NQ", "SQ", "SP", "QR"];
+
 const ALLOWED_PAYMENT_METHODS = new Set([
-  "BC", "M2", "SP", "I1", "BT", "FT", "IR",
+  "BC", "M2", "QRIS", "SP", "I1", "BT", "FT", "IR",
   "VA", "B1", "A1", "AG", "NC", "BR", "S1", "DM",
   "BV", "OV", "SA", "LF", "LA", "DA", "SL", "OL",
   "NQ", "SQ", "DN", "AT", "JP",
@@ -509,16 +654,6 @@ serve(async (req) => {
       throw new HttpError(500, "Kredensial Duitku belum dikonfigurasi.");
     }
 
-    // Duitku sandbox's QRIS `SP` channel currently hangs. Fail fast instead
-    // of waiting for Everpro rates and the 20-second Duitku abort. The LP UI
-    // also hides QRIS; re-enable both after production/NQ/SQ is confirmed.
-    if (paymentMethod === "SP" && !duitku.isProduction) {
-      throw new HttpError(
-        400,
-        "QRIS sedang tidak tersedia di sandbox. Pilih BCA Virtual Account atau metode pembayaran lain.",
-      );
-    }
-
     // Reuse lp-everpro-rates so the price and courier list come from the same
     // server-side configuration as the shipment gatekeeper.
     const ratesStartedAt = Date.now();
@@ -586,6 +721,62 @@ serve(async (req) => {
 
     if (amount < 1) {
       throw new HttpError(500, "Nominal pembayaran tidak valid.");
+    }
+
+    // The LP exposes one generic QRIS option. Resolve it to the QRIS channel
+    // that is actually active for this merchant, preferring NQ/SQ over the
+    // ShopeePay-specific SP channel that hangs in the sandbox.
+    const isGenericQris = paymentMethod === "QRIS" || paymentMethod === "SP";
+    const isQrisRequest = isGenericQris || QRIS_METHOD_CODES.has(paymentMethod);
+    let resolvedPaymentMethod = paymentMethod;
+
+    if (isGenericQris) {
+      let methods: DuitkuPaymentMethod[];
+      try {
+        methods = await fetchDuitkuPaymentMethods(duitku, amount);
+      } catch (error) {
+        console.error(
+          "[DUITKU-LP-ORDER] getpaymentmethod failed:",
+          error instanceof Error ? error.message : String(error),
+        );
+        throw new HttpError(
+          502,
+          "Gagal memeriksa metode QRIS. Coba lagi atau pilih BCA Virtual Account.",
+        );
+      }
+
+      const qrisCandidates = methods
+        .filter((method) =>
+          QRIS_METHOD_CODES.has(method.code) || /qris/i.test(method.name)
+        )
+        .map((method) => `${method.code}:${method.name}`);
+      console.log(
+        `[DUITKU-LP-ORDER] QRIS channels=${
+          qrisCandidates.join(", ") || "(none)"
+        }`,
+      );
+
+      const qrisMethod = pickQrisMethod(methods);
+      if (!qrisMethod) {
+        console.error(
+          `[DUITKU-LP-ORDER] No active QRIS channel. methods=${
+            methods.map((method) => `${method.code}:${method.name}`).join(", ")
+          }`,
+        );
+        throw new HttpError(
+          400,
+          "QRIS belum aktif di akun Duitku. Aktifkan QRIS di dashboard Duitku atau pilih BCA Virtual Account.",
+        );
+      }
+
+      resolvedPaymentMethod = qrisMethod.code;
+      console.log(
+        `[DUITKU-LP-ORDER] QRIS request=${paymentMethod} resolved=${resolvedPaymentMethod} name=${qrisMethod.name}`,
+      );
+    } else if (isQrisRequest) {
+      console.log(
+        `[DUITKU-LP-ORDER] QRIS explicit method=${resolvedPaymentMethod}`,
+      );
     }
 
     const orderNumber = `LP-${
@@ -668,7 +859,7 @@ serve(async (req) => {
     const payload = {
       merchantCode: duitku.merchantCode,
       paymentAmount: amount,
-      paymentMethod,
+      paymentMethod: resolvedPaymentMethod,
       merchantOrderId: orderNumber,
       productDetails: `${config.productName} x${quantity}`,
       additionalParam: encodeURIComponent(JSON.stringify({
@@ -689,7 +880,7 @@ serve(async (req) => {
     };
 
     console.log(
-      `[DUITKU-LP-ORDER] Creating ${orderNumber} amount=${amount} method=${paymentMethod} rate=${selectedRate?.rate_code || rateCode}`,
+      `[DUITKU-LP-ORDER] Creating ${orderNumber} amount=${amount} method=${resolvedPaymentMethod} requested=${paymentMethod} rate=${selectedRate?.rate_code || rateCode}`,
     );
     console.log(
       `[DUITKU-LP-ORDER] inquiry URL=${duitku.inquiryUrl} env=${
@@ -700,12 +891,17 @@ serve(async (req) => {
     const inquiryStartedAt = Date.now();
     let duitkuResponse: Response;
     try {
-      duitkuResponse = await fetchDuitkuInquiry(duitku.inquiryUrl, payload);
+      // QRIS can hang on a bad channel; abort sooner than a VA inquiry.
+      duitkuResponse = await fetchDuitkuInquiry(
+        duitku.inquiryUrl,
+        payload,
+        isQrisRequest ? 12000 : 20000,
+      );
     } catch (error) {
       if ((error as Error).name === "AbortError") {
-        const timeoutMessage = paymentMethod === "SP"
-          ? "QRIS sedang tidak merespons. Coba pilih BCA Virtual Account atau metode pembayaran lain."
-          : `Duitku tidak merespons dalam 20 detik (metode ${paymentMethod}). Coba lagi atau pilih metode pembayaran lain.`;
+        const timeoutMessage = isQrisRequest
+          ? "QRIS sedang tidak merespons. Coba lagi atau pilih BCA Virtual Account."
+          : `Duitku tidak merespons dalam 20 detik (metode ${resolvedPaymentMethod}). Coba lagi atau pilih metode pembayaran lain.`;
         throw new HttpError(504, timeoutMessage);
       }
       throw error;
@@ -791,6 +987,7 @@ serve(async (req) => {
     return jsonResponse({
       success: true,
       order_number: orderNumber,
+      payment_method: resolvedPaymentMethod,
       environment: duitku.isProduction ? "production" : "sandbox",
       amount,
       pricing: {

@@ -110,6 +110,7 @@
     var map = {
       'BC': 'BCA Virtual Account',
       'M2': 'Mandiri Virtual Account',
+      'QRIS': 'QRIS',
       'SP': 'QRIS',
       'I1': 'BNI Virtual Account',
       'BT': 'Permata Virtual Account',
@@ -1407,7 +1408,15 @@
       if (phoneInput && stored.phone) { phoneInput.value = stored.phone; }
       if (addressInput && stored.address) { addressInput.value = stored.address; }
       if (qtyInput && stored.quantity) { qtyInput.value = stored.quantity; }
-      if (paymentSelect && stored.payment_method) { paymentSelect.value = stored.payment_method; }
+      if (paymentSelect && stored.payment_method) {
+        // Checkout lama menyimpan kode `SP`; opsi baru memakai `QRIS`.
+        var storedPaymentMethod = stored.payment_method === 'SP' ? 'QRIS' : stored.payment_method;
+        var hasPaymentOption = Array.prototype.some.call(
+          paymentSelect.options,
+          function (option) { return option.value === storedPaymentMethod; }
+        );
+        if (hasPaymentOption) { paymentSelect.value = storedPaymentMethod; }
+      }
       if (stored.rate_code) { state.pendingRateCode = stored.rate_code; }
 
       await loadProvinces();
