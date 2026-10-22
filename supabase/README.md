@@ -207,8 +207,8 @@ Current build markers:
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-22-duitku-timeout-method`
-- Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
+- `duitku-lp-order`: `2026-10-22-qris-sandbox-guard`
+- Client: `js/main.js?v=20261021-10`, `css/styles.css?v=20261022-1`
 
 From the repository root:
 
@@ -262,8 +262,12 @@ returns a friendlier `Duitku sedang tidak dapat memproses pembayaran` message.
 When a 504 persists, retry and try a different payment method (for example BCA
 VA instead of QRIS) to determine whether a specific channel is down.
 
-If the timeout message specifically mentions QRIS (`SP`), switch to BCA VA
-(`BC`). The helper script
+The LP now hides QRIS while the sandbox `SP` channel is unreliable, and
+`duitku-lp-order` returns a fast `400` for `SP` in sandbox so a cached page
+does not wait 20 seconds. Re-enable the option after production or an active
+`NQ`/`SQ` channel is confirmed.
+
+The helper script
 [`scripts/duitku-diagnose.ps1`](../scripts/duitku-diagnose.ps1) tests Duitku
 directly from your machine with your sandbox credentials, without exposing the
 API key:
@@ -276,7 +280,13 @@ API key:
 
 If `methods` succeeds quickly but `SP` hangs, the QRIS channel is the problem.
 If `methods` itself hangs or returns an auth error, check the sandbox merchant
-code/API key and Duitku's sandbox status.
+code/API key and Duitku's sandbox status. If `methods` lists `NQ` or `SQ`, test
+those QRIS channels before re-enabling the QRIS option:
+
+```powershell
+.\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode inquiry -PaymentMethod NQ -Amount 198000
+.\scripts\duitku-diagnose.ps1 -Environment sandbox -Mode inquiry -PaymentMethod SQ -Amount 198000
+```
 
 ## Callback endpoint
 

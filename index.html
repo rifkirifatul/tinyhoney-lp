@@ -28,7 +28,7 @@
   <link rel="icon" type="image/png" href="assets/logo/icon-small.webp">
 
   <!-- Single render-blocking CSS — satisfies Req 19.2 -->
-  <link rel="stylesheet" href="css/styles.css?v=20261021-4">
+  <link rel="stylesheet" href="css/styles.css?v=20261022-1">
 </head>
 <body>
   <!-- Google Tag Manager (noscript) -->
@@ -820,7 +820,10 @@
               <option value="" disabled selected>Pilih metode&hellip;</option>
               <option value="BC">BCA Virtual Account</option>
               <option value="M2">Mandiri Virtual Account</option>
-              <option value="SP">QRIS (ShopeePay/GoPay/OVO/Dana)</option>
+              <!-- QRIS `SP` is temporarily hidden: the Duitku sandbox channel
+                   hangs/times out. Re-enable after switching to production or
+                   confirming NQ/SQ is active in the merchant account. -->
+              <!-- <option value="SP">QRIS (ShopeePay/GoPay/OVO/Dana)</option> -->
               <option value="I1">BNI Virtual Account</option>
               <option value="BT">Permata Virtual Account</option>
               <option value="AL">Alfamart</option>

@@ -185,7 +185,7 @@ Response:
 ```
 
 **Status TinyHoney:** sudah memakai `duitku-lp-order` (build
-`2026-10-22-duitku-timeout-method`). Function ini mengabaikan `amount`, `subtotal`,
+`2026-10-22-qris-sandbox-guard`). Function ini mengabaikan `amount`, `subtotal`,
 `shipping_cost`, dan `shipping_discount` dari browser. Ia menghitung ulang
 harga produk, promo, dan ongkir lewat `lp-everpro-rates`, lalu membuat Duitku
 inquiry dengan `paymentAmount` server-side. Kode terbaru menggantikan versi
@@ -335,7 +335,7 @@ Bukti probe dan detail temuan: [`SECURITY-AUDIT-2026-10-21.md`](SECURITY-AUDIT-2
      ditolak karena amount tidak cocok, jadi **tidak bisa mendapat barang**
      dengan harga palsu. Tapi ini tetap masalah integritas pembayaran dan CS.
    - **Sudah diperbaiki untuk TinyHoney di repo:** kode `duitku-lp-order`
-     (build `2026-10-22-duitku-timeout-method`) sekarang menghitung `paymentAmount`
+     (build `2026-10-22-qris-sandbox-guard`) sekarang menghitung `paymentAmount`
      dari `LP_CONFIGS` + rates Everpro dan mengabaikan amount browser. Nama
      function tetap `duitku-lp-order`; tidak ada function pembayaran baru.
 
@@ -597,8 +597,8 @@ versi yang berjalan.
 
 - `lp-everpro-rates`: `2026-10-21-promo-env`
 - `lp-everpro-create-order`: `2026-10-21-promo-env`
-- `duitku-lp-order`: `2026-10-22-duitku-timeout-method`
-- Client: `index.html` → `js/main.js?v=20261021-10`, `css/styles.css?v=20261021-4`
+- `duitku-lp-order`: `2026-10-22-qris-sandbox-guard`
+- Client: `index.html` → `js/main.js?v=20261021-10`, `css/styles.css?v=20261022-1`
 
 Saat mengubah kode, naikkan marker dan cache-bust. Jangan mengandalkan cache
 browser.
@@ -613,7 +613,7 @@ berubah.
 ## 11. Hardening berikutnya (urutan prioritas)
 
 1. ~~**Server-side amount untuk Duitku.**~~ Selesai di repo: `duitku-lp-order`
-   build `2026-10-22-duitku-timeout-method` memakai `LP_CONFIGS` + rates server-side.
+   build `2026-10-22-qris-sandbox-guard` memakai `LP_CONFIGS` + rates server-side.
    Deploy dan test satu transaksi sandbox.
 2. **Snapshot order di `lp_orders`.** `duitku-lp-order` sudah menulis snapshot;
    langkah berikutnya adalah membuat `lp-everpro-create-order` membaca snapshot

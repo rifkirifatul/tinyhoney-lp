@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 // Visible marker so deployed logs prove which build is running.
-const FUNCTION_BUILD = "2026-10-22-duitku-timeout-method";
+const FUNCTION_BUILD = "2026-10-22-qris-sandbox-guard";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -504,6 +504,21 @@ serve(async (req) => {
       throw new HttpError(500, "SUPABASE_URL belum dikonfigurasi.");
     }
 
+    const duitku = getDuitkuConfig();
+    if (!duitku.merchantCode || !duitku.apiKey) {
+      throw new HttpError(500, "Kredensial Duitku belum dikonfigurasi.");
+    }
+
+    // Duitku sandbox's QRIS `SP` channel currently hangs. Fail fast instead
+    // of waiting for Everpro rates and the 20-second Duitku abort. The LP UI
+    // also hides QRIS; re-enable both after production/NQ/SQ is confirmed.
+    if (paymentMethod === "SP" && !duitku.isProduction) {
+      throw new HttpError(
+        400,
+        "QRIS sedang tidak tersedia di sandbox. Pilih BCA Virtual Account atau metode pembayaran lain.",
+      );
+    }
+
     // Reuse lp-everpro-rates so the price and courier list come from the same
     // server-side configuration as the shipment gatekeeper.
     const ratesStartedAt = Date.now();
@@ -571,11 +586,6 @@ serve(async (req) => {
 
     if (amount < 1) {
       throw new HttpError(500, "Nominal pembayaran tidak valid.");
-    }
-
-    const duitku = getDuitkuConfig();
-    if (!duitku.merchantCode || !duitku.apiKey) {
-      throw new HttpError(500, "Kredensial Duitku belum dikonfigurasi.");
     }
 
     const orderNumber = `LP-${
